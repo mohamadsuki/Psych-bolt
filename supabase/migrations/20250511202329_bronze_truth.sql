@@ -1,20 +1,27 @@
 /*
-  # Fix database schema with policy checks
+  # Database Schema Setup with Policy Checks
   
   1. Tables
-    - Create therapists table with updated_at trigger
-    - Create clients table with foreign key to therapists
-    - Create parent_intakes table for form data
-    - Create evaluator_assessments table
-    - Create generated_reports table
+    - Creates therapists, clients, parent_intakes, evaluator_assessments, and generated_reports tables
+    - Adds appropriate constraints and comments
     
   2. Indexes
-    - Add indexes for therapist_id, code, and active status
+    - Creates indexes for improved query performance
     
   3. Security
-    - Enable RLS on all tables
-    - Add policies with IF NOT EXISTS checks
+    - Enables RLS on all tables
+    - Creates policies with safety checks
+    
+  4. Triggers
+    - Adds updated_at trigger for therapists table
 */
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Allow all operations without authentication" ON therapists;
+DROP POLICY IF EXISTS "Allow all operations without authentication" ON clients;
+DROP POLICY IF EXISTS "Allow all operations without authentication" ON parent_intakes;
+DROP POLICY IF EXISTS "Allow all operations without authentication" ON evaluator_assessments;
+DROP POLICY IF EXISTS "Allow all operations without authentication" ON generated_reports;
 
 -- Create therapists table
 CREATE TABLE IF NOT EXISTS therapists (
@@ -91,19 +98,6 @@ ALTER TABLE parent_intakes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE evaluator_assessments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE generated_reports ENABLE ROW LEVEL SECURITY;
 
--- Drop existing policies if they exist
-DO $$ 
-BEGIN
-  DROP POLICY IF EXISTS "Allow all operations without authentication" ON therapists;
-  DROP POLICY IF EXISTS "Allow all operations without authentication" ON clients;
-  DROP POLICY IF EXISTS "Allow all operations without authentication" ON parent_intakes;
-  DROP POLICY IF EXISTS "Allow all operations without authentication" ON evaluator_assessments;
-  DROP POLICY IF EXISTS "Allow all operations without authentication" ON generated_reports;
-EXCEPTION
-  WHEN undefined_object THEN
-    NULL;
-END $$;
-
 -- Create RLS policies
 CREATE POLICY "Allow all operations without authentication" 
   ON therapists FOR ALL 
@@ -145,7 +139,6 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Create trigger for therapists table
-DROP TRIGGER IF EXISTS update_therapists_updated_at ON therapists;
 CREATE TRIGGER update_therapists_updated_at
   BEFORE UPDATE ON therapists
   FOR EACH ROW

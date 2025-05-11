@@ -1280,19 +1280,3 @@ export const updateClientTherapist = async (clientId: string, therapistId: strin
     throw error;
   }
 };
-
-export { supabase }
-
-export { saveParentIntake }
-
-export { getTherapists, updateClientTherapist, createTherapist, deleteTherapist }
-
-export { getClientByIdNumber }
-
-export { saveEvaluatorAssessment }
-
-export { deleteClientRecord, getParentIntake, getEvaluatorAssessment, getGeneratedReport }
-
-export { saveParentIntake, checkAuthStatus }
-
-export { saveGeneratedReport }

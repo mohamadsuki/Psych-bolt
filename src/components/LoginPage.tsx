@@ -42,7 +42,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       setLoading(true);
       setError(null);
       
-      // Use a more direct approach that skips connectivity checks
+      console.log('Attempting to load client data for ID number:', id);
+
       const therapist = await checkAuthCode(code);
       
       if (therapist) {

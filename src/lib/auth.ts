@@ -53,17 +53,12 @@ export const checkAuthCode = async (code: string): Promise<Therapist | null> => 
       console.error('Auth check error:', error);
       throw error;
     }
-      throw error;
-    }
 
     if (data) {
       // Add is_admin flag based on code
       const isAdmin = code === 'admin123';
-      // Add is_admin flag based on code
-      const isAdmin = code === 'admin123';
       return {
         ...data,
-        is_admin: isAdmin
         is_admin: isAdmin
       };
     }
@@ -71,14 +66,6 @@ export const checkAuthCode = async (code: string): Promise<Therapist | null> => 
     return null;
   } catch (error: any) {
     console.error('Error during authentication:', error);
-    
-    // Handle network errors with a user-friendly message
-    if (error.message?.includes('Failed to fetch') ||
-        error.message?.includes('NetworkError') ||
-        error.message?.includes('Network Error')) {
-      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
-    }
-    
     
     // Handle network errors with a user-friendly message
     if (error.message?.includes('Failed to fetch') ||

@@ -1240,3 +1240,7 @@ export const updateClientTherapist = async (clientId: string, therapistId: strin
     throw error;
   }
 };
+
+export { supabase }
+
+export { createClientRecord, saveParentIntake, getClientById, checkAuthStatus, getClientByIdNumber, getParentIntake }

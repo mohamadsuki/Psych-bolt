@@ -940,6 +940,147 @@ export const getGeneratedReport = async (clientId: string) => {
       return cachedReport;
     }
 
+// Therapist management functions
+export const getTherapists = async () => {
+  try {
+    // Check cache first
+    const cachedTherapists = getFromCache('therapists', 'all');
+    if (cachedTherapists) {
+      return cachedTherapists;
+    }
+
+    const { data, error } = await withRetry(async () => {
+      return await supabase
+        .from('therapists')
+        .select('*')
+        .order('name');
+    });
+
+    if (error) throw error;
+
+    // Cache results
+    addToCache('therapists', 'all', data);
+
+    return data || [];
+  } catch (error: any) {
+    console.error('Error fetching therapists:', error);
+    
+    if (isNetworkError(error)) {
+      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+    }
+    
+    throw error;
+  }
+};
+
+export const createTherapist = async (therapistData: any) => {
+  try {
+    // Validate required fields
+    if (!therapistData.name || !therapistData.code) {
+      throw new Error('שם וקוד גישה הם שדות חובה');
+    }
+
+    // Check if this is an update or create
+    const isUpdate = !!therapistData.id;
+
+    let result;
+    if (isUpdate) {
+      const { data, error } = await supabase
+        .from('therapists')
+        .update({
+          name: therapistData.name,
+          code: therapistData.code,
+          active: therapistData.active !== false
+        })
+        .eq('id', therapistData.id)
+        .select();
+
+      if (error) throw error;
+      result = data?.[0];
+    } else {
+      const { data, error } = await supabase
+        .from('therapists')
+        .insert({
+          name: therapistData.name,
+          code: therapistData.code,
+          active: true
+        })
+        .select();
+
+      if (error) throw error;
+      result = data?.[0];
+    }
+
+    // Invalidate cache
+    invalidateCache('therapists');
+
+    return result;
+  } catch (error: any) {
+    console.error('Error creating/updating therapist:', error);
+    
+    if (error.message?.includes('therapists_code_key')) {
+      throw new Error('קוד גישה זה כבר קיים במערכת');
+    }
+    
+    if (isNetworkError(error)) {
+      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+    }
+    
+    throw error;
+  }
+};
+
+export const deleteTherapist = async (id: string) => {
+  try {
+    const { error } = await supabase
+      .from('therapists')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    // Invalidate cache
+    invalidateCache('therapists');
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error deleting therapist:', error);
+    
+    if (isNetworkError(error)) {
+      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+    }
+    
+    throw error;
+  }
+};
+
+export const updateClientTherapist = async (clientId: string, therapistId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('clients')
+      .update({ therapist_id: therapistId })
+      .eq('id', clientId)
+      .select();
+
+    if (error) throw error;
+
+    // Invalidate relevant caches
+    invalidateCache('clients');
+    invalidateCache('clients', clientId);
+
+    return data?.[0];
+  } catch (error: any) {
+    console.error('Error updating client therapist:', error);
+    
+    if (isNetworkError(error)) {
+      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+    }
+    
+    throw error;
+  }
+};
+
+
     try {
       const { data, error } = await supabase
         .from('generated_reports')

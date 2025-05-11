@@ -74,10 +74,7 @@ export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as s
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true // Important for OAuth flows
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true // Important for OAuth flows
+    detectSessionInUrl: true, // Important for OAuth flows
     storageKey: 'supabase.auth.token',
     storage: {
       getItem: (key) => {
@@ -105,12 +102,9 @@ export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as s
   },
   global: {
     // Using default fetch - let Supabase handle retries and timeouts
-    // Using default fetch - let Supabase handle retries and timeouts
     headers: {
       // Add headers that might help with CORS in production
-      'X-Client-Info': 'supabase-js',
-      // Add headers that might help with CORS in production
-      'X-Client-Info': 'supabase-js',
+      'X-Client-Info': 'supabase-js'
     },
     // Add fetch options for better performance
     fetch: (url, options) => {

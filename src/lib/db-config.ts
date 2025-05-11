@@ -15,7 +15,7 @@ export const createDbClient = () => {
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Missing Supabase credentials');
+    throw new Error('Missing Supabase credentials – set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY');
   }
 
   return createClient(supabaseUrl, supabaseAnonKey, {

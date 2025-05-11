@@ -43,6 +43,21 @@ export async function withRetry<T>(
   throw lastError;
 }
 
+export async function pingSupabase() {
+  try {
+    const { data, error } = await supabase.from('clients').select('id').limit(1);
+    if (error) {
+      console.error('Supabase ping failed:', error);
+      return false;
+    }
+    console.log('Supabase connection successful');
+    return true;
+  } catch (err) {
+    console.error('Supabase ping failed:', err);
+    return false;
+  }
+}
+
 export const generateCacheKey = (base: string, params: Record<string, any> = {}): string => {
   const sortedParams = Object.entries(params)
     .sort(([a], [b]) => a.localeCompare(b))

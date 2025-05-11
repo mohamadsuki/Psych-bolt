@@ -2,6 +2,7 @@ import { lazy, Suspense, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import './index.css';
+import { pingSupabase } from './lib/db-utils';
 
 // Lazy load the main App component
 const App = lazy(() => import('./App.tsx'));
@@ -51,6 +52,9 @@ const setupOfflineDetection = () => {
 // Error handling for unexpected errors during rendering
 const renderApp = () => {
   try {
+    // Check Supabase connection
+    pingSupabase().catch(console.error);
+    
     // Register service worker - deferred
     registerServiceWorker();
     

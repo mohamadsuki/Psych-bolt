@@ -2,6 +2,10 @@
   command = "npm run build"
   publish = "dist"
 
+[build.environment]
+  VITE_SUPABASE_URL = "${{ env.SUPABASE_URL }}"
+  VITE_SUPABASE_ANON_KEY = "${{ env.SUPABASE_ANON_KEY }}"
+
 # Redirect all routes to index.html to support SPA routing
 [[redirects]]
   from = "/*"

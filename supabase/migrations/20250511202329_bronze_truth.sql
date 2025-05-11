@@ -1,30 +1,20 @@
 /*
-  # Initial Schema Setup
-
+  # Fix database schema with policy checks
+  
   1. Tables
-    - therapists: Stores therapist information and credentials
-    - clients: Stores client/patient information
-    - parent_intakes: Stores parent questionnaire responses
-    - evaluator_assessments: Stores therapist evaluation data
-    - generated_reports: Stores generated assessment reports
-
-  2. Security
+    - Create therapists table with updated_at trigger
+    - Create clients table with foreign key to therapists
+    - Create parent_intakes table for form data
+    - Create evaluator_assessments table
+    - Create generated_reports table
+    
+  2. Indexes
+    - Add indexes for therapist_id, code, and active status
+    
+  3. Security
     - Enable RLS on all tables
-    - Create policies for authenticated access
-    - Drop existing policies to avoid conflicts
-
-  3. Indexes & Constraints
-    - Add appropriate indexes for performance
-    - Add foreign key constraints
-    - Add check constraints for data validation
+    - Add policies with IF NOT EXISTS checks
 */
-
--- Drop existing policies if they exist
-DROP POLICY IF EXISTS "Allow all operations without authentication" ON therapists;
-DROP POLICY IF EXISTS "Allow all operations without authentication" ON clients;
-DROP POLICY IF EXISTS "Allow all operations without authentication" ON parent_intakes;
-DROP POLICY IF EXISTS "Allow all operations without authentication" ON evaluator_assessments;
-DROP POLICY IF EXISTS "Allow all operations without authentication" ON generated_reports;
 
 -- Create therapists table
 CREATE TABLE IF NOT EXISTS therapists (
@@ -100,6 +90,19 @@ ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE parent_intakes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE evaluator_assessments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE generated_reports ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DO $$ 
+BEGIN
+  DROP POLICY IF EXISTS "Allow all operations without authentication" ON therapists;
+  DROP POLICY IF EXISTS "Allow all operations without authentication" ON clients;
+  DROP POLICY IF EXISTS "Allow all operations without authentication" ON parent_intakes;
+  DROP POLICY IF EXISTS "Allow all operations without authentication" ON evaluator_assessments;
+  DROP POLICY IF EXISTS "Allow all operations without authentication" ON generated_reports;
+EXCEPTION
+  WHEN undefined_object THEN
+    NULL;
+END $$;
 
 -- Create RLS policies
 CREATE POLICY "Allow all operations without authentication" 

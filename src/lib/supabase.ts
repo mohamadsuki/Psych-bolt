@@ -78,6 +78,30 @@ export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as s
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true // Important for OAuth flows
+    storageKey: 'supabase.auth.token',
+    storage: {
+      getItem: (key) => {
+        try {
+          return localStorage.getItem(key);
+        } catch {
+          return null;
+        }
+      },
+      setItem: (key, value) => {
+        try {
+          localStorage.setItem(key, value);
+        } catch {
+          console.warn('Failed to save auth state to localStorage');
+        }
+      },
+      removeItem: (key) => {
+        try {
+          localStorage.removeItem(key);
+        } catch {
+          console.warn('Failed to remove auth state from localStorage');
+        }
+      }
+    }
   },
   global: {
     // Using default fetch - let Supabase handle retries and timeouts
@@ -87,17 +111,39 @@ export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as s
       'X-Client-Info': 'supabase-js',
       // Add headers that might help with CORS in production
       'X-Client-Info': 'supabase-js',
+    },
+    // Add fetch options for better performance
+    fetch: (url, options) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      return fetch(url, {
+        ...options,
+        signal: controller.signal,
+        keepalive: true,
+        cache: 'default'
+      }).finally(() => clearTimeout(timeoutId));
     }
   },
   db: {
-    schema: 'public'
+    schema: 'public',
+    // Add pooling configuration
+    poolConfig: {
+      maxConnections: 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000
+    }
   }
 });
 
 // Configure better timeout for fetch operations
-const FETCH_TIMEOUT = 15000; // 15 seconds timeout - balanced for production
+const FETCH_TIMEOUT = 10000; // 10 seconds timeout
 const RETRY_DELAYS = [1000, 3000, 5000]; // Progressive backoff
-const MAX_RETRIES = 2; // Two retries for a good balance
+const MAX_RETRIES = 3; // Three retries for better reliability
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache TTL
+
+// Update cache TTL
+cache.ttl = CACHE_TTL;
 
 /**
  * Check if an error is likely a network-related error

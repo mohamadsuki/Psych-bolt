@@ -911,8 +911,6 @@ export const saveGeneratedReport = async (clientId: string, reportContent: strin
         // Invalidate cache
         invalidateCache('reports', clientId);
         
-        
-        
         return data[0];
       }
     } catch (queryError) {
@@ -939,6 +937,68 @@ export const getGeneratedReport = async (clientId: string) => {
     if (cachedReport) {
       return cachedReport;
     }
+
+    try {
+      const { data, error } = await supabase
+        .from('generated_reports')
+        .select('*')
+        .eq('client_id', clientId)
+        .maybeSingle();
+      
+      if (error) throw error;
+      
+      // Cache the result
+      addToCache('reports', clientId, data);
+      
+      return data;
+    } catch (queryError) {
+      if (isNetworkError(queryError)) {
+        throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+      }
+      throw queryError;
+    }
+  } catch (error: any) {
+    console.error('Error fetching generated report:', error);
+    
+    if (isNetworkError(error)) {
+      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+    }
+    
+    throw error;
+  }
+};
+
+export const finalizeReport = async (clientId: string) => {
+  try {
+    try {
+      const { data, error } = await supabase
+        .from('generated_reports')
+        .update({ is_finalized: true })
+        .eq('client_id', clientId)
+        .select();
+      
+      if (error) throw error;
+      
+      // Invalidate cache
+      invalidateCache('reports', clientId);
+      
+      return data[0];
+    } catch (queryError) {
+      if (isNetworkError(queryError)) {
+        throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+      }
+      throw queryError;
+    }
+  } catch (error: any) {
+    console.error('Error finalizing report:', error);
+    
+    if (isNetworkError(error)) {
+      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+    }
+    
+    throw error;
+  }
+};
 
 // Therapist management functions
 export const getTherapists = async () => {
@@ -1071,69 +1131,6 @@ export const updateClientTherapist = async (clientId: string, therapistId: strin
     return data?.[0];
   } catch (error: any) {
     console.error('Error updating client therapist:', error);
-    
-    if (isNetworkError(error)) {
-      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
-    }
-    
-    throw error;
-  }
-};
-
-
-    try {
-      const { data, error } = await supabase
-        .from('generated_reports')
-        .select('*')
-        .eq('client_id', clientId)
-        .maybeSingle();
-      
-      if (error) throw error;
-      
-      // Cache the result
-      addToCache('reports', clientId, data);
-      
-      return data;
-    } catch (queryError) {
-      if (isNetworkError(queryError)) {
-        throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
-      }
-      throw queryError;
-    }
-  } catch (error: any) {
-    console.error('Error fetching generated report:', error);
-    
-    if (isNetworkError(error)) {
-      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
-    }
-    
-    throw error;
-  }
-};
-
-export const finalizeReport = async (clientId: string) => {
-  try {
-    try {
-      const { data, error } = await supabase
-        .from('generated_reports')
-        .update({ is_finalized: true })
-        .eq('client_id', clientId)
-        .select();
-      
-      if (error) throw error;
-      
-      // Invalidate cache
-      invalidateCache('reports', clientId);
-      
-      return data[0];
-    } catch (queryError) {
-      if (isNetworkError(queryError)) {
-        throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
-      }
-      throw queryError;
-    }
-  } catch (error: any) {
-    console.error('Error finalizing report:', error);
     
     if (isNetworkError(error)) {
       throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');

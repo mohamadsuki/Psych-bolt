@@ -1,19 +1,21 @@
 /*
-  # Database Schema Setup with Policy Checks
-  
+  # Database Schema Setup
+
   1. Tables
-    - Creates therapists, clients, parent_intakes, evaluator_assessments, and generated_reports tables
-    - Adds appropriate constraints and comments
-    
-  2. Indexes
-    - Creates indexes for improved query performance
-    
-  3. Security
+    - therapists: Stores therapist records with authentication codes
+    - clients: Stores client/patient information with therapist assignments
+    - parent_intakes: Stores parent questionnaire responses
+    - evaluator_assessments: Stores psychologist evaluation data
+    - generated_reports: Stores generated assessment reports
+  
+  2. Security
     - Enables RLS on all tables
-    - Creates policies with safety checks
+    - Sets up permissive policies for development
+    - Adds constraints and validation
     
-  4. Triggers
-    - Adds updated_at trigger for therapists table
+  3. Performance
+    - Creates indexes for common query patterns
+    - Adds trigger for updated_at timestamp
 */
 
 -- Drop existing policies if they exist

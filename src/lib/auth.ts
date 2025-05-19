@@ -15,38 +15,12 @@ export interface Therapist {
  */
 export const checkAuthCode = async (code: string): Promise<Therapist | null> => {
   try {
-    // Check if we already have a session in localStorage
-    if (localStorage.getItem('supabase.auth.token')) {
-      return { isAuthenticated: true, success: true, error: null };
-    }
-
-    // Get the current session
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      // If we have a session, user is authenticated
-      if (session) {
-        return { isAuthenticated: true, success: true, error: null };
-      }
-    } catch (sessionError) {
-      console.error("Error getting auth session:", sessionError);
-      
-      if (isNetworkError(sessionError)) {
-        return { 
-          isAuthenticated: false, 
-          success: false, 
-          error: 'שגיאת תקשורת. נסה שוב מאוחר יותר.'
-        };
-      }
-      
-      // For other errors, continue with sign-in attempt
-    }
-    
     // Look up the therapist by code - Direct approach without connectivity checks
     const { data, error } = await supabase
       .from('therapists')
       .select('*')
       .eq('code', code)
+      .eq('active', true)
       .maybeSingle();
 
     if (error) {
@@ -57,10 +31,18 @@ export const checkAuthCode = async (code: string): Promise<Therapist | null> => 
     if (data) {
       // Add is_admin flag based on code
       const isAdmin = code === 'admin123';
-      return {
+      const therapist = {
         ...data,
         is_admin: isAdmin
       };
+      
+      // Update last login timestamp
+      await supabase
+        .from('therapists')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', data.id);
+      
+      return therapist;
     }
 
     return null;

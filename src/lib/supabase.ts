@@ -74,7 +74,7 @@ export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as s
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: false, // Disable URL detection to avoid CORS issues
+    detectSessionInUrl: true,
     storageKey: 'supabase.auth.token',
     storage: {
       getItem: (key) => {
@@ -104,7 +104,8 @@ export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as s
     headers: {
       'X-Client-Info': 'supabase-js',
       'X-Client-Library': 'supabase-js',
-      'X-Client-Library-Version': '2.39.7'
+      'X-Client-Library-Version': '2.39.7',
+      'Cache-Control': 'no-cache'
     },
     // Add fetch options for better performance
     fetch: (url, options) => {
@@ -117,8 +118,7 @@ export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as s
         signal: controller.signal,
         keepalive: true,
         cache: 'no-cache',
-        mode: 'cors',
-        credentials: 'include'
+        mode: 'cors'
       }).finally(() => clearTimeout(timeoutId));
     }
   },

@@ -33,6 +33,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Clear any previous errors
+    setError(null);
+    
     if (!code.trim()) {
       setError('נא להזין קוד גישה');
       return;
@@ -40,13 +43,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
     try {
       setLoading(true);
-      setError(null);
       
       const therapist = await checkAuthCode(code);
       
       if (therapist) {
-        // Successfully authenticated
-        localStorage.setItem('therapist', JSON.stringify(therapist));
+        // Successfully authenticated - therapist data is already stored in localStorage
         if (onLoginSuccess) onLoginSuccess();
         navigate('/');
       } else {
@@ -54,8 +55,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      // More user-friendly error message that doesn't mention connectivity issues
-      setError('שגיאה בהתחברות. נא לנסות שוב מאוחר יותר.');
+      // Use the error message from the API if available
+      setError(err.message || 'שגיאה בהתחברות. נא לנסות שוב מאוחר יותר.');
     } finally {
       setLoading(false);
     }

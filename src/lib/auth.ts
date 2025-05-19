@@ -15,37 +15,56 @@ export interface Therapist {
  */
 export const checkAuthCode = async (code: string): Promise<Therapist | null> => {
   try {
-    // Look up the therapist by code - Direct approach without connectivity checks
-    const { data, error } = await supabase
-      .from('therapists')
-      .select('*')
-      .eq('code', code)
-      .eq('active', true)
-      .maybeSingle();
-
-    if (error) {
-      console.error('Auth check error:', error);
-      throw error;
-    }
-
-    if (data) {
-      // Add is_admin flag based on code
-      const isAdmin = code === 'admin123';
-      const therapist = {
-        ...data,
-        is_admin: isAdmin
-      };
-      
-      // Update last login timestamp
-      await supabase
+    // First try to get the therapist data
+    try {
+      const { data, error } = await supabase
         .from('therapists')
-        .update({ last_login: new Date().toISOString() })
-        .eq('id', data.id);
-      
-      return therapist;
-    }
+        .select('*')
+        .eq('code', code)
+        .eq('active', true)
+        .maybeSingle();
 
-    return null;
+      if (error) {
+        console.error('Auth check error:', error);
+        throw error;
+      }
+
+      if (data) {
+        // Add is_admin flag based on code
+        const isAdmin = code === 'admin123';
+        const therapist = {
+          ...data,
+          is_admin: isAdmin
+        };
+      
+        // Update last login timestamp silently
+        try {
+          await supabase
+            .from('therapists')
+            .update({ last_login: new Date().toISOString() })
+            .eq('id', data.id);
+        } catch (updateError) {
+          // Don't fail login if update fails
+          console.warn('Failed to update last login:', updateError);
+        }
+      
+        // Store therapist data in localStorage
+        try {
+          localStorage.setItem('therapist', JSON.stringify(therapist));
+        } catch (storageError) {
+          console.warn('Failed to store therapist data:', storageError);
+        }
+        
+        return therapist;
+      }
+
+      return null;
+    } catch (queryError) {
+      if (isNetworkError(queryError)) {
+        throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+      }
+      throw queryError;
+    }
   } catch (error: any) {
     console.error('Error during authentication:', error);
     

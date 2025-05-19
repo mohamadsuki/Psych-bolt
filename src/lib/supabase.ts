@@ -74,7 +74,7 @@ export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as s
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    detectSessionInUrl: false,
     storageKey: 'supabase.auth.token',
     storage: {
       getItem: (key) => {
@@ -103,8 +103,6 @@ export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as s
   global: {
     headers: {
       'X-Client-Info': 'supabase-js',
-      'X-Client-Library': 'supabase-js',
-      'X-Client-Library-Version': '2.39.7',
       'Cache-Control': 'no-cache'
     },
     // Add fetch options for better performance
@@ -112,13 +110,19 @@ export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as s
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
-      // Add CORS mode and credentials
+      // Add CORS mode and credentials with better defaults
       return fetch(url, {
         ...options,
         signal: controller.signal,
         keepalive: true,
         cache: 'no-cache',
-        mode: 'cors'
+        mode: 'cors',
+        credentials: 'include',
+        headers: {
+          ...options?.headers,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
       }).finally(() => clearTimeout(timeoutId));
     }
   },

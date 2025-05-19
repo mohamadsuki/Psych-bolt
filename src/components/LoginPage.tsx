@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { checkAuthCode } from '../lib/auth';
-import { FileText, Users, Shield, AlertCircle, Loader, WifiOff } from 'lucide-react';
+import { FileText, Users, Shield, AlertCircle, Loader, WifiOff, RefreshCw } from 'lucide-react';
 
 interface LoginPageProps {
   onLoginSuccess?: () => void;
@@ -42,6 +42,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
   }, [error, code]);
+
+  const handleManualRetry = () => {
+    if (code) {
+      setRetryCount(0); // Reset retry count for manual retry
+      handleSubmit(null, true);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent | null, isRetry = false) => {
     if (e) e.preventDefault();
@@ -94,9 +101,20 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       }
       
       setError(
-        <div className="flex items-center">
-          {isNetworkError && <WifiOff size={18} className="ml-2 flex-shrink-0" />}
-          <span className="whitespace-pre-line">{err.message || 'שגיאה בהתחברות. נא לנסות שוב מאוחר יותר.'}</span>
+        <div className="flex flex-col space-y-2">
+          <div className="flex items-center">
+            {isNetworkError && <WifiOff size={18} className="ml-2 flex-shrink-0" />}
+            <span className="whitespace-pre-line">{err.message || 'שגיאה בהתחברות. נא לנסות שוב מאוחר יותר.'}</span>
+          </div>
+          {isNetworkError && retryCount >= 3 && (
+            <button
+              onClick={handleManualRetry}
+              className="flex items-center justify-center text-blue-600 hover:text-blue-700 text-sm py-1"
+            >
+              <RefreshCw size={16} className="ml-1" />
+              נסה שוב
+            </button>
+          )}
         </div>
       );
     } finally {

@@ -14,6 +14,17 @@ const RETRY_COUNT = 3;
 const INITIAL_DELAY = 1000; // 1 second
 const MAX_DELAY = 5000; // 5 seconds
 
+// Enhanced network check that tests actual connectivity to Supabase
+const checkConnectivity = async (): Promise<boolean> => {
+  try {
+    // Try to make a lightweight request to Supabase
+    const { data, error } = await supabase.from('therapists').select('count').limit(1);
+    return !error;
+  } catch (e) {
+    return false;
+  }
+};
+
 /**
  * Implements exponential backoff retry logic with jitter
  * @param fn Function to retry
@@ -36,6 +47,9 @@ const withRetry = async <T>(
     const jitter = Math.random() * 200;
     const nextDelay = Math.min(delay * 2 + jitter, MAX_DELAY);
     
+    // Log retry attempt
+    console.log(`Retrying operation. Attempts remaining: ${retries - 1}`);
+    
     await new Promise(resolve => setTimeout(resolve, delay));
     return withRetry(fn, retries - 1, nextDelay);
   }
@@ -48,24 +62,43 @@ const withRetry = async <T>(
  */
 export const checkAuthCode = async (code: string): Promise<Therapist | null> => {
   try {
-    // Check network connectivity first
+    // Enhanced connectivity check
     if (!navigator.onLine) {
       throw new Error('אין חיבור לאינטרנט. נא לבדוק את החיבור ולנסות שוב.');
     }
 
-    // Wrap the database query in retry logic
+    // Test actual connectivity to Supabase
+    const hasConnectivity = await checkConnectivity();
+    if (!hasConnectivity) {
+      throw new Error(
+        'לא ניתן להתחבר לשרת. נא לוודא:\n' +
+        '1. חיבור לאינטרנט תקין\n' +
+        '2. חומת אש או VPN לא חוסמים את החיבור\n' +
+        '3. השרת זמין\n' +
+        'המערכת תנסה להתחבר שוב אוטומטית...'
+      );
+    }
+
+    // Wrap the database query in retry logic with enhanced error handling
     const { data, error } = await withRetry(async () => {
-      return await supabase
+      const response = await supabase
         .from('therapists')
         .select('*')
         .eq('code', code)
         .eq('active', true)
         .maybeSingle();
+
+      if (response.error) {
+        console.error('Supabase query error:', response.error);
+        throw response.error;
+      }
+
+      return response;
     });
 
     if (error) {
       console.error('Auth check error:', error);
-      if (error.message?.includes('Failed to fetch')) {
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
         throw new Error('בעיית תקשורת. בודק חיבור לאינטרנט ומנסה שוב...');
       }
       throw error;
@@ -105,12 +138,14 @@ export const checkAuthCode = async (code: string): Promise<Therapist | null> => 
   } catch (error: any) {
     console.error('Error during authentication:', error);
     
-    // Enhanced network error handling
+    // Enhanced network error handling with specific error messages
     if (isNetworkError(error)) {
       throw new Error(
         'בעיית תקשורת. נא לוודא:\n' +
         '1. חיבור לאינטרנט תקין\n' +
         '2. חומת אש או VPN לא חוסמים את החיבור\n' +
+        '3. דפדפן מעודכן\n' +
+        '4. ניקוי מטמון הדפדפן\n' +
         'המערכת תנסה להתחבר שוב אוטומטית...'
       );
     }

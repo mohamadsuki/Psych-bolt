@@ -1,29 +1,21 @@
 /*
-  # Database Schema Setup
+  # Initial Schema Setup with Policy Checks
 
-  1. Tables
+  1. Tables Created
     - therapists: Stores therapist records with authentication codes
-    - clients: Stores client/patient information with therapist assignments
+    - clients: Stores client/patient information
     - parent_intakes: Stores parent questionnaire responses
     - evaluator_assessments: Stores psychologist evaluation data
     - generated_reports: Stores generated assessment reports
-  
-  2. Security
-    - Enables RLS on all tables
-    - Sets up permissive policies for development
-    - Adds constraints and validation
-    
-  3. Performance
-    - Creates indexes for common query patterns
-    - Adds trigger for updated_at timestamp
-*/
 
--- Drop existing policies if they exist
-DROP POLICY IF EXISTS "Allow all operations without authentication" ON therapists;
-DROP POLICY IF EXISTS "Allow all operations without authentication" ON clients;
-DROP POLICY IF EXISTS "Allow all operations without authentication" ON parent_intakes;
-DROP POLICY IF EXISTS "Allow all operations without authentication" ON evaluator_assessments;
-DROP POLICY IF EXISTS "Allow all operations without authentication" ON generated_reports;
+  2. Security
+    - Enable RLS on all tables
+    - Add policies with existence checks
+    - Add constraints and validations
+
+  3. Indexes
+    - Create indexes for performance optimization
+*/
 
 -- Create therapists table
 CREATE TABLE IF NOT EXISTS therapists (
@@ -100,36 +92,69 @@ ALTER TABLE parent_intakes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE evaluator_assessments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE generated_reports ENABLE ROW LEVEL SECURITY;
 
--- Create RLS policies
-CREATE POLICY "Allow all operations without authentication" 
-  ON therapists FOR ALL 
-  TO anon, authenticated 
-  USING (true) 
-  WITH CHECK (true);
+-- Create RLS policies with existence checks
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'therapists' 
+    AND policyname = 'Allow all operations without authentication'
+  ) THEN
+    CREATE POLICY "Allow all operations without authentication" 
+      ON therapists FOR ALL 
+      TO anon, authenticated 
+      USING (true) 
+      WITH CHECK (true);
+  END IF;
 
-CREATE POLICY "Allow all operations without authentication" 
-  ON clients FOR ALL 
-  TO anon, authenticated 
-  USING (true) 
-  WITH CHECK (true);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'clients' 
+    AND policyname = 'Allow all operations without authentication'
+  ) THEN
+    CREATE POLICY "Allow all operations without authentication" 
+      ON clients FOR ALL 
+      TO anon, authenticated 
+      USING (true) 
+      WITH CHECK (true);
+  END IF;
 
-CREATE POLICY "Allow all operations without authentication" 
-  ON parent_intakes FOR ALL 
-  TO anon, authenticated 
-  USING (true) 
-  WITH CHECK (true);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'parent_intakes' 
+    AND policyname = 'Allow all operations without authentication'
+  ) THEN
+    CREATE POLICY "Allow all operations without authentication" 
+      ON parent_intakes FOR ALL 
+      TO anon, authenticated 
+      USING (true) 
+      WITH CHECK (true);
+  END IF;
 
-CREATE POLICY "Allow all operations without authentication" 
-  ON evaluator_assessments FOR ALL 
-  TO anon, authenticated 
-  USING (true) 
-  WITH CHECK (true);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'evaluator_assessments' 
+    AND policyname = 'Allow all operations without authentication'
+  ) THEN
+    CREATE POLICY "Allow all operations without authentication" 
+      ON evaluator_assessments FOR ALL 
+      TO anon, authenticated 
+      USING (true) 
+      WITH CHECK (true);
+  END IF;
 
-CREATE POLICY "Allow all operations without authentication" 
-  ON generated_reports FOR ALL 
-  TO anon, authenticated 
-  USING (true) 
-  WITH CHECK (true);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE tablename = 'generated_reports' 
+    AND policyname = 'Allow all operations without authentication'
+  ) THEN
+    CREATE POLICY "Allow all operations without authentication" 
+      ON generated_reports FOR ALL 
+      TO anon, authenticated 
+      USING (true) 
+      WITH CHECK (true);
+  END IF;
+END $$;
 
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_therapists_updated_at()
@@ -141,6 +166,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Create trigger for therapists table
+DROP TRIGGER IF EXISTS update_therapists_updated_at ON therapists;
 CREATE TRIGGER update_therapists_updated_at
   BEFORE UPDATE ON therapists
   FOR EACH ROW

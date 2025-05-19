@@ -3,10 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 
-// Lazy load the main App component
 const App = lazy(() => import('./App.tsx'));
 
-// Loading component
 const LoadingApp = () => (
   <div className="min-h-screen bg-slate-50 flex items-center justify-center rtl">
     <div className="text-center">
@@ -14,4 +12,20 @@ const LoadingApp = () => (
       <p className="text-gray-600 text-lg">טוען את המערכת...</p>
     </div>
   </div>
+);
+
+const container = document.getElementById('root');
+
+if (!container) {
+  throw new Error('Root element not found');
+}
+
+const root = createRoot(container);
+
+root.render(
+  <BrowserRouter>
+    <Suspense fallback={<LoadingApp />}>
+      <App />
+    </Suspense>
+  </BrowserRouter>
 );

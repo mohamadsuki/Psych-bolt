@@ -13,6 +13,7 @@ export interface Therapist {
 const RETRY_COUNT = 3;
 const INITIAL_DELAY = 1000; // 1 second
 const MAX_DELAY = 5000; // 5 seconds
+const CONNECTIVITY_TIMEOUT = 5000; // 5 seconds timeout for connectivity check
 
 // Enhanced network check that tests actual connectivity to Supabase
 const checkConnectivity = async (): Promise<boolean> => {
@@ -22,15 +23,29 @@ const checkConnectivity = async (): Promise<boolean> => {
       return false;
     }
 
-    // Try to make a lightweight request to Supabase health check endpoint
-    const response = await fetch(`${supabase.supabaseUrl}/rest/v1/`, {
-      method: 'HEAD',
-      headers: {
-        'apikey': supabase.supabaseKey
+    // Try to make a lightweight request to Supabase health check endpoint with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), CONNECTIVITY_TIMEOUT);
+
+    try {
+      const response = await fetch(`${supabase.supabaseUrl}/rest/v1/`, {
+        method: 'HEAD',
+        headers: {
+          'apikey': supabase.supabaseKey,
+          'Content-Type': 'application/json'
+        },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      return response.ok;
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        console.warn('Connectivity check timed out');
+        return false;
       }
-    });
-    
-    return response.ok;
+      throw e;
+    }
   } catch (e) {
     console.warn('Connectivity check failed:', e);
     return false;
@@ -74,12 +89,12 @@ const withRetry = async <T>(
  */
 export const checkAuthCode = async (code: string): Promise<Therapist | null> => {
   try {
-    // Enhanced connectivity check
+    // Enhanced connectivity check with specific error messages
     if (!navigator.onLine) {
       throw new Error('אין חיבור לאינטרנט. נא לבדוק את החיבור ולנסות שוב.');
     }
 
-    // Test actual connectivity to Supabase
+    // Test actual connectivity to Supabase with timeout
     const hasConnectivity = await checkConnectivity();
     if (!hasConnectivity) {
       throw new Error(
@@ -136,7 +151,7 @@ export const checkAuthCode = async (code: string): Promise<Therapist | null> => 
         console.warn('Failed to update last login:', updateError);
       }
     
-      // Store therapist data in localStorage
+      // Store therapist data in localStorage with error handling
       try {
         localStorage.setItem('therapist', JSON.stringify(therapist));
       } catch (storageError) {

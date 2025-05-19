@@ -15,17 +15,31 @@ const INITIAL_DELAY = 1000; // 1 second
 const MAX_DELAY = 5000; // 5 seconds
 const CONNECTIVITY_TIMEOUT = 5000; // 5 seconds timeout for connectivity check
 
+interface ConnectivityCheckResult {
+  isConnected: boolean;
+  error?: {
+    type: 'offline' | 'timeout' | 'server' | 'unknown';
+    message: string;
+  };
+}
+
 // Enhanced network check that tests actual connectivity to Supabase
-const checkConnectivity = async (): Promise<boolean> => {
+const checkConnectivity = async (): Promise<ConnectivityCheckResult> => {
   try {
     // First check browser online status
     if (!navigator.onLine) {
-      return false;
+      return {
+        isConnected: false,
+        error: {
+          type: 'offline',
+          message: 'הדפדפן במצב לא מקוון. נא לבדוק את חיבור האינטרנט ולנסות שוב.'
+        }
+      };
     }
 
     // Try to make a lightweight request to Supabase health check endpoint with timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // Increased timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     try {
       const response = await fetch(`${supabase.supabaseUrl}/rest/v1/`, {
@@ -39,17 +53,39 @@ const checkConnectivity = async (): Promise<boolean> => {
       });
       
       clearTimeout(timeoutId);
-      return response.ok;
+      
+      if (!response.ok) {
+        return {
+          isConnected: false,
+          error: {
+            type: 'server',
+            message: 'השרת אינו זמין כרגע. נא לנסות שוב בעוד מספר דקות.'
+          }
+        };
+      }
+      
+      return { isConnected: true };
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') {
-        console.warn('Connectivity check timed out');
-        return false;
+        return {
+          isConnected: false,
+          error: {
+            type: 'timeout',
+            message: 'זמן התגובה של השרת ארוך מדי. נא לבדוק את איכות החיבור ולנסות שוב.'
+          }
+        };
       }
       throw e;
     }
   } catch (e) {
     console.warn('Connectivity check failed:', e);
-    return false;
+    return {
+      isConnected: false,
+      error: {
+        type: 'unknown',
+        message: 'אירעה שגיאה בבדיקת החיבור לשרת. נא לנסות שוב.'
+      }
+    };
   }
 };
 
@@ -71,11 +107,9 @@ const withRetry = async <T>(
       throw error;
     }
     
-    // Add jitter to prevent thundering herd
     const jitter = Math.random() * 200;
     const nextDelay = Math.min(delay * 2 + jitter, MAX_DELAY);
     
-    // Log retry attempt
     console.log(`Retrying operation. Attempts remaining: ${retries - 1}`);
     
     await new Promise(resolve => setTimeout(resolve, delay));
@@ -91,21 +125,9 @@ const withRetry = async <T>(
 export const checkAuthCode = async (code: string): Promise<Therapist | null> => {
   try {
     // Enhanced connectivity check with specific error messages
-    if (!navigator.onLine) {
-      throw new Error('אין חיבור לאינטרנט. נא לבדוק את החיבור ולנסות שוב.');
-    }
-
-    // Test actual connectivity to Supabase with timeout
-    const hasConnectivity = await checkConnectivity();
-    if (!hasConnectivity) {
-      throw new Error(
-        'לא ניתן להתחבר לשרת. נא לוודא:\n' +
-        '1. חיבור לאינטרנט תקין\n' +
-        '2. חומת אש או VPN לא חוסמים את החיבור\n' +
-        '3. השרת זמין\n' +
-        '4. ניקוי מטמון הדפדפן\n' +
-        'המערכת תנסה להתחבר שוב אוטומטית...'
-      );
+    const connectivityCheck = await checkConnectivity();
+    if (!connectivityCheck.isConnected) {
+      throw new Error(connectivityCheck.error?.message || 'בעיית תקשורת לא ידועה');
     }
 
     // Wrap the database query in retry logic with enhanced error handling
@@ -134,30 +156,25 @@ export const checkAuthCode = async (code: string): Promise<Therapist | null> => 
     }
 
     if (data) {
-      // Add is_admin flag based on code
       const isAdmin = code === 'admin123';
       const therapist = {
         ...data,
         is_admin: isAdmin
       };
     
-      // Update last login timestamp silently
       try {
         await supabase
           .from('therapists')
           .update({ last_login: new Date().toISOString() })
           .eq('id', data.id);
       } catch (updateError) {
-        // Don't fail login if update fails
         console.warn('Failed to update last login:', updateError);
       }
     
-      // Store therapist data in localStorage with error handling
       try {
         localStorage.setItem('therapist', JSON.stringify(therapist));
       } catch (storageError) {
         console.warn('Failed to store therapist data:', storageError);
-        // If localStorage fails, we can still proceed with the session
       }
       
       return therapist;
@@ -167,15 +184,16 @@ export const checkAuthCode = async (code: string): Promise<Therapist | null> => 
   } catch (error: any) {
     console.error('Error during authentication:', error);
     
-    // Enhanced network error handling with specific error messages
     if (isNetworkError(error)) {
+      const troubleshootingSteps = [
+        'בדיקת חיבור לאינטרנט',
+        'בדיקת חומת אש או הגדרות VPN',
+        'ניקוי מטמון הדפדפן',
+        'רענון הדף'
+      ].map((step, index) => `${index + 1}. ${step}`).join('\n');
+      
       throw new Error(
-        'בעיית תקשורת. נא לוודא:\n' +
-        '1. חיבור לאינטרנט תקין\n' +
-        '2. חומת אש או VPN לא חוסמים את החיבור\n' +
-        '3. דפדפן מעודכן\n' +
-        '4. ניקוי מטמון הדפדפן\n' +
-        'המערכת תנסה להתחבר שוב אוטומטית...'
+        `שגיאת תקשורת\n\nצעדים מומלצים לפתרון:\n${troubleshootingSteps}\n\nהמערכת תנסה להתחבר שוב אוטומטית...`
       );
     }
     
@@ -194,7 +212,7 @@ export const getCurrentTherapist = (): Therapist | null => {
       return JSON.parse(storedTherapist);
     } catch (e) {
       console.error('Error parsing stored therapist data:', e);
-      localStorage.removeItem('therapist'); // Clear invalid data
+      localStorage.removeItem('therapist');
       return null;
     }
   }
@@ -205,10 +223,7 @@ export const getCurrentTherapist = (): Therapist | null => {
  * Logs the current user out
  */
 export const logout = () => {
-  // Remove therapist data from localStorage
   localStorage.removeItem('therapist');
-  
-  // Redirect to login page without confirmation dialog
   window.location.href = '/login';
 };
 

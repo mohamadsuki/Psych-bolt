@@ -74,7 +74,7 @@ export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as s
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true, // Important for OAuth flows
+    detectSessionInUrl: true,
     storageKey: 'supabase.auth.token',
     storage: {
       getItem: (key) => {
@@ -101,15 +101,12 @@ export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as s
     }
   },
   global: {
-    // Using default fetch - let Supabase handle retries and timeouts
     headers: {
-      // Add headers that might help with CORS in production
       'X-Client-Info': 'supabase-js'
     },
-    // Add fetch options for better performance
     fetch: (url, options) => {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
       
       return fetch(url, {
         ...options,
@@ -121,7 +118,6 @@ export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as s
   },
   db: {
     schema: 'public',
-    // Add pooling configuration
     poolConfig: {
       maxConnections: 5,
       idleTimeoutMillis: 30000,
@@ -131,28 +127,20 @@ export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as s
 });
 
 // Configure better timeout for fetch operations
-const FETCH_TIMEOUT = 10000; // 10 seconds timeout
-const RETRY_DELAYS = [1000, 3000, 5000]; // Progressive backoff
-const MAX_RETRIES = 3; // Three retries for better reliability
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache TTL
+const FETCH_TIMEOUT = 10000;
+const RETRY_DELAYS = [1000, 3000, 5000];
+const MAX_RETRIES = 3;
+const CACHE_TTL = 5 * 60 * 1000;
 
-// Update cache TTL
 cache.ttl = CACHE_TTL;
 
-/**
- * Check if an error is likely a network-related error
- * @param error The error to check
- * @returns True if it's a network error
- */
 const isNetworkError = (error: any): boolean => {
   if (!error) return false;
   
-  // Check browser online status first
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return true;
   }
   
-  // Handle different types of network errors
   const errorMsg = error.message || error.toString();
   return !!(
     errorMsg.includes('Failed to fetch') ||
@@ -168,86 +156,198 @@ const isNetworkError = (error: any): boolean => {
   );
 };
 
-/**
- * Retry a function with exponential backoff
- * @param fn Function to retry
- * @param maxRetries Maximum number of retries
- * @returns Result of the function
- */
 async function withRetry<T>(fn: () => Promise<T>, maxRetries = MAX_RETRIES): Promise<T> {
   let lastError: any;
   
   for (let i = 0; i <= maxRetries; i++) {
     try {
-      // Create an abort controller for timeout
       const controller = new AbortController();
       const signal = controller.signal;
       
-      // Set up the timeout
       const timeoutId = setTimeout(() => {
         controller.abort();
       }, FETCH_TIMEOUT);
       
       try {
-        // Add the controller to the global scope temporarily 
-        // so functions can access it if needed
         (window as any).__currentFetchController = controller;
         
-        // Call the function (which might use fetch internally)
         const result = await fn();
         
-        // Clear the timeout
         clearTimeout(timeoutId);
         
-        // Clear the global controller reference
         delete (window as any).__currentFetchController;
         
         return result;
       } catch (error) {
-        // Clear the timeout
         clearTimeout(timeoutId);
         
-        // Clear the global controller reference
         delete (window as any).__currentFetchController;
         
-        // Re-throw the error to be handled by the outer try-catch
         throw error;
       }
     } catch (error: any) {
       console.warn(`Attempt ${i + 1}/${maxRetries + 1} failed:`, error?.message || error);
       lastError = error;
       
-      // Check if we should retry
       if (i < maxRetries && isNetworkError(error)) {
-        // Wait before retrying
         const delay = RETRY_DELAYS[i] || RETRY_DELAYS[RETRY_DELAYS.length - 1];
         console.log(`Network error detected, retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
       
-      // If we're here, we've either exhausted retries or it's not a network error
       throw error;
     }
   }
   
-  // This should never be reached, but just in case
   throw lastError;
 }
+
+// Therapist management functions
+export const getTherapists = async () => {
+  try {
+    // Check cache first
+    const cachedTherapists = getFromCache('therapists', 'all');
+    if (cachedTherapists) {
+      return cachedTherapists;
+    }
+
+    const { data, error } = await withRetry(async () => {
+      return await supabase
+        .from('therapists')
+        .select('*')
+        .order('name');
+    });
+
+    if (error) throw error;
+
+    // Cache the results
+    addToCache('therapists', 'all', data);
+
+    return data || [];
+  } catch (error: any) {
+    console.error('Error fetching therapists:', error);
+    if (isNetworkError(error)) {
+      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+    }
+    throw error;
+  }
+};
+
+export const createTherapist = async (therapistData: { id?: string, name: string, code: string }) => {
+  try {
+    let query;
+    
+    if (therapistData.id) {
+      // Update existing therapist
+      query = supabase
+        .from('therapists')
+        .update({
+          name: therapistData.name,
+          code: therapistData.code,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', therapistData.id)
+        .select();
+    } else {
+      // Create new therapist
+      query = supabase
+        .from('therapists')
+        .insert({
+          name: therapistData.name,
+          code: therapistData.code,
+          active: true
+        })
+        .select();
+    }
+
+    const { data, error } = await withRetry(async () => {
+      return await query;
+    });
+
+    if (error) {
+      if (error.code === '23505') { // Unique constraint violation
+        throw new Error('קוד גישה זה כבר קיים במערכת');
+      }
+      throw error;
+    }
+
+    // Invalidate cache
+    invalidateCache('therapists');
+
+    return data[0];
+  } catch (error: any) {
+    console.error('Error creating/updating therapist:', error);
+    if (isNetworkError(error)) {
+      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+    }
+    throw error;
+  }
+};
+
+export const deleteTherapist = async (id: string) => {
+  try {
+    const { error } = await withRetry(async () => {
+      return await supabase
+        .from('therapists')
+        .delete()
+        .eq('id', id);
+    });
+
+    if (error) throw error;
+
+    // Invalidate cache
+    invalidateCache('therapists');
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error deleting therapist:', error);
+    if (isNetworkError(error)) {
+      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+    }
+    throw error;
+  }
+};
+
+export const updateClientTherapist = async (clientId: string, therapistId: string) => {
+  try {
+    const { data, error } = await withRetry(async () => {
+      return await supabase
+        .from('clients')
+        .update({ 
+          therapist_id: therapistId || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', clientId)
+        .select();
+    });
+
+    if (error) throw error;
+
+    // Invalidate relevant caches
+    invalidateCache('clients', clientId);
+    invalidateCache('therapists');
+
+    return data[0];
+  } catch (error: any) {
+    console.error('Error updating client therapist:', error);
+    if (isNetworkError(error)) {
+      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+    }
+    throw error;
+  }
+};
 
 // Authentication check function
 export const checkAuthStatus = async (triggerSignIn = false) => {
   try {
-    // Check if we already have a session in localStorage
     if (localStorage.getItem('supabase.auth.token')) {
       return { isAuthenticated: true, success: true, error: null };
     }
 
-    // Get the current session
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
-      // If we have a session, user is authenticated
       if (session) {
         return { isAuthenticated: true, success: true, error: null };
       }
@@ -261,14 +361,10 @@ export const checkAuthStatus = async (triggerSignIn = false) => {
           error: 'שגיאת תקשורת. נסה שוב מאוחר יותר.'
         };
       }
-      
-      // For other errors, continue with sign-in attempt if requested
     }
     
-    // If no session and triggerSignIn is true, initiate sign in
     if (triggerSignIn) {
       try {
-        // Use email/password sign-in for development
         const { data, error } = await supabase.auth.signInWithPassword({
           email: 'demo@example.com',
           password: 'demopassword123'
@@ -276,7 +372,6 @@ export const checkAuthStatus = async (triggerSignIn = false) => {
         
         if (error) {
           console.error('Auth error:', error);
-          // If user doesn't exist, let's create one for development purposes
           if (error.message.includes('Invalid login credentials')) {
             try {
               const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
@@ -288,7 +383,6 @@ export const checkAuthStatus = async (triggerSignIn = false) => {
                 return { isAuthenticated: false, success: false, error: signUpError.message };
               }
               
-              // Now try to sign in again
               const { data: signInAfterSignUpData, error: signInAfterSignUpError } = 
                 await supabase.auth.signInWithPassword({
                   email: 'demo@example.com',
@@ -331,7 +425,6 @@ export const checkAuthStatus = async (triggerSignIn = false) => {
       }
     }
     
-    // No session and not triggering sign in
     return { isAuthenticated: false, success: false, error: null };
   } catch (error: any) {
     console.error('Error checking authentication status:', error);
@@ -355,7 +448,6 @@ export const checkAuthStatus = async (triggerSignIn = false) => {
 // Client-related functions
 export const getClients = async () => {
   try {    
-    // Get therapist info for filtering
     let therapistData = null;
     try {
       const therapist = localStorage.getItem('therapist');
@@ -366,33 +458,27 @@ export const getClients = async () => {
       console.warn('Error reading therapist from localStorage:', storageError);
     }
     
-    // Create cache key based on therapist
     const cacheKey = therapistData ? 
       (therapistData.is_admin ? 'admin' : therapistData.id) : 
       'all';
     
-    // Check cache
     const cachedClients = getFromCache('clients', cacheKey);
     if (cachedClients) {
       return cachedClients;
     }
     
-    // Create query
     let query = supabase.from('clients').select('*').order('created_at', { ascending: false });
     
-    // Filter by therapist if applicable
     if (therapistData && !therapistData.is_admin) {
       query = query.eq('therapist_id', therapistData.id);
     }
     
-    // Execute query with retry
     const { data, error } = await withRetry(async () => {
       return await query;
     });
     
     if (error) throw error;
     
-    // Cache results
     addToCache('clients', cacheKey, data);
     
     return data || [];
@@ -409,32 +495,28 @@ export const getClients = async () => {
 
 export const updateClientRecord = async (clientId: string, childData: any) => {
   try {
-    // Validate ID number
     if (!childData.idNumber || !/^\d{9}$/.test(childData.idNumber)) {
       throw new Error('מספר תעודת זהות חייב להיות 9 ספרות');
     }
     
-    // Check if the updated ID number already exists for a different client
-    if (childData.idNumber) {
-      try {
-        const { data: existingClient, error: fetchError } = await supabase
-          .from('clients')
-          .select('id')
-          .eq('id_number', childData.idNumber)
-          .neq('id', clientId)
-          .maybeSingle();
+    try {
+      const { data: existingClient, error: fetchError } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('id_number', childData.idNumber)
+        .neq('id', clientId)
+        .maybeSingle();
         
-        if (fetchError) throw fetchError;
+      if (fetchError) throw fetchError;
         
-        if (existingClient) {
-          throw new Error('מספר תעודת זהות כבר קיים במערכת עבור לקוח אחר.');
-        }
-      } catch (checkError) {
-        if (isNetworkError(checkError)) {
-          throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
-        }
-        throw checkError;
+      if (existingClient) {
+        throw new Error('מספר תעודת זהות כבר קיים במערכת עבור לקוח אחר.');
       }
+    } catch (checkError) {
+      if (isNetworkError(checkError)) {
+        throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+      }
+      throw checkError;
     }
     
     try {
@@ -448,7 +530,7 @@ export const updateClientRecord = async (clientId: string, childData: any) => {
           parent_name: childData.parentName,
           parent_email: childData.parentEmail || null,
           parent_phone: childData.parentPhone,
-          address: childData.address // New field
+          address: childData.address
         })
         .eq('id', clientId)
         .select();
@@ -462,10 +544,8 @@ export const updateClientRecord = async (clientId: string, childData: any) => {
         throw error;
       }
       
-      // Invalidate the cache
       invalidateCache('clients', clientId);
       
-      // Return the first item of the data array to ensure we're returning a single object
       return data[0];
     } catch (updateError) {
       if (isNetworkError(updateError)) {
@@ -476,7 +556,6 @@ export const updateClientRecord = async (clientId: string, childData: any) => {
   } catch (error: any) {
     console.error('Error updating client:', error);
     
-    // Provide more helpful error messages for network issues
     if (isNetworkError(error)) {
       throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
     }
@@ -487,7 +566,6 @@ export const updateClientRecord = async (clientId: string, childData: any) => {
 
 export const deleteClientRecord = async (clientId: string) => {
   try {
-    // Delete the client record
     try {
       const { error } = await supabase
         .from('clients')
@@ -503,7 +581,6 @@ export const deleteClientRecord = async (clientId: string) => {
         throw error;
       }
       
-      // Invalidate all caches related to this client
       invalidateCache('clients', clientId);
       invalidateCache('parentIntakes', clientId);
       invalidateCache('evaluatorAssessments', clientId);
@@ -519,7 +596,6 @@ export const deleteClientRecord = async (clientId: string) => {
   } catch (error: any) {
     console.error('Error deleting client:', error);
     
-    // Provide more helpful error messages for network issues
     if (isNetworkError(error)) {
       throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
     }
@@ -530,7 +606,6 @@ export const deleteClientRecord = async (clientId: string) => {
 
 export const getClientById = async (id: string) => {
   try {
-    // Check cache first
     const cachedClient = getFromCache('clients', id);
     if (cachedClient) {
       return cachedClient;
@@ -545,7 +620,6 @@ export const getClientById = async (id: string) => {
       
       if (error) throw error;
       
-      // Cache the result
       addToCache('clients', id, data);
       
       return data;
@@ -558,7 +632,6 @@ export const getClientById = async (id: string) => {
   } catch (error: any) {
     console.error('Error fetching client:', error);
     
-    // Provide more helpful error messages for network issues
     if (isNetworkError(error)) {
       throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
     }
@@ -567,10 +640,8 @@ export const getClientById = async (id: string) => {
   }
 };
 
-// Get client by ID number
 export const getClientByIdNumber = async (idNumber: string) => {
   try {
-    // Check cache first
     const cachedClient = getFromCache('clients', `idnumber:${idNumber}`);
     if (cachedClient) {
       return cachedClient;
@@ -585,10 +656,9 @@ export const getClientByIdNumber = async (idNumber: string) => {
       
       if (error) throw error;
       
-      // Cache the result
       if (data) {
         addToCache('clients', `idnumber:${idNumber}`, data);
-        addToCache('clients', data.id, data); // Also cache by ID
+        addToCache('clients', data.id, data);
       }
       
       return data;
@@ -601,7 +671,6 @@ export const getClientByIdNumber = async (idNumber: string) => {
   } catch (error: any) {
     console.error('Error fetching client by ID number:', error);
     
-    // Provide more helpful error messages for network issues
     if (isNetworkError(error)) {
       throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
     }
@@ -614,7 +683,6 @@ export const getClientByIdNumber = async (idNumber: string) => {
 export const saveParentIntake = async (clientId: string, formData: any, isSubmitted: boolean = false) => {
   try {
     try {
-      // First check if there's an existing intake that we should update instead of creating a new one
       const { data: existingIntake, error: fetchError } = await supabase
         .from('parent_intakes')
         .select('id')
@@ -625,14 +693,11 @@ export const saveParentIntake = async (clientId: string, formData: any, isSubmit
         throw fetchError;
       }
 
-      // Set the submitted_at timestamp only if this is an actual submission (not auto-save)
       const submittedAt = isSubmitted ? new Date().toISOString() : null;
 
       if (existingIntake) {
-        // Update existing intake
         const updateData: any = { form_data: formData };
         
-        // Only set submitted_at if this is a submission or it doesn't exist
         if (isSubmitted) {
           updateData.submitted_at = submittedAt;
         }
@@ -645,12 +710,10 @@ export const saveParentIntake = async (clientId: string, formData: any, isSubmit
 
         if (error) throw error;
         
-        // Invalidate cache
         invalidateCache('parentIntakes', clientId);
         
         return data[0];
       } else {
-        // Create new intake
         const { data, error } = await supabase
           .from('parent_intakes')
           .insert({
@@ -662,7 +725,6 @@ export const saveParentIntake = async (clientId: string, formData: any, isSubmit
         
         if (error) throw error;
         
-        // Invalidate cache
         invalidateCache('parentIntakes', clientId);
         
         return data[0];
@@ -676,7 +738,6 @@ export const saveParentIntake = async (clientId: string, formData: any, isSubmit
   } catch (error: any) {
     console.error('Error saving parent intake:', error);
     
-    // Provide more helpful error messages for network issues
     if (isNetworkError(error)) {
       throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
     }
@@ -687,7 +748,6 @@ export const saveParentIntake = async (clientId: string, formData: any, isSubmit
 
 export const getParentIntake = async (clientId: string) => {
   try {
-    // Check cache first
     const cachedIntake = getFromCache('parentIntakes', clientId);
     if (cachedIntake) {
       return cachedIntake;
@@ -702,7 +762,6 @@ export const getParentIntake = async (clientId: string) => {
       
       if (error) throw error;
       
-      // Cache the result
       addToCache('parentIntakes', clientId, data);
       
       return data;
@@ -715,7 +774,6 @@ export const getParentIntake = async (clientId: string) => {
   } catch (error: any) {
     console.error('Error fetching parent intake:', error);
     
-    // Provide more helpful error messages for network issues
     if (isNetworkError(error)) {
       throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
     }
@@ -727,26 +785,21 @@ export const getParentIntake = async (clientId: string) => {
 // Evaluator assessment functions
 export const saveEvaluatorAssessment = async (clientId: string, evaluatorData: any, isSubmitted: boolean = false) => {
   try {
-    // Ensure arrays are properly formatted
     const sanitizedData = { ...evaluatorData };
     
-    // Make sure diagnosis is an array
     if (!Array.isArray(sanitizedData.diagnosis)) {
       sanitizedData.diagnosis = [];
     }
     
-    // Make sure validityFactors is an array
     if (!Array.isArray(sanitizedData.validityFactors)) {
       sanitizedData.validityFactors = [];
     }
     
-    // Make sure testsAdministered is an array
     if (!Array.isArray(sanitizedData.testsAdministered)) {
       sanitizedData.testsAdministered = [];
     }
     
     try {
-      // First check if there's an existing assessment
       const { data: existingAssessment, error: fetchError } = await supabase
         .from('evaluator_assessments')
         .select('id')
@@ -757,18 +810,15 @@ export const saveEvaluatorAssessment = async (clientId: string, evaluatorData: a
         throw fetchError;
       }
 
-      // Set the submitted_at timestamp only if this is an actual submission (not auto-save)
       const submittedAt = isSubmitted ? new Date().toISOString() : null;
 
       if (existingAssessment) {
-        // Update existing assessment
         const updateData: any = { 
           evaluator_data: sanitizedData,
           evaluator_name: sanitizedData.evaluator?.name || 'Unknown',
           evaluator_license: sanitizedData.evaluator?.licenseNo || 'Unknown'
         };
         
-        // Only set submitted_at if this is a submission or it doesn't exist
         if (isSubmitted) {
           updateData.submitted_at = submittedAt;
         }
@@ -781,12 +831,10 @@ export const saveEvaluatorAssessment = async (clientId: string, evaluatorData: a
 
         if (error) throw error;
         
-        // Invalidate cache
         invalidateCache('evaluatorAssessments', clientId);
         
         return data[0];
       } else {
-        // Insert new assessment
         const { data, error } = await supabase
           .from('evaluator_assessments')
           .insert({
@@ -800,7 +848,6 @@ export const saveEvaluatorAssessment = async (clientId: string, evaluatorData: a
         
         if (error) throw error;
         
-        // Invalidate cache
         invalidateCache('evaluatorAssessments', clientId);
         
         return data[0];
@@ -814,7 +861,6 @@ export const saveEvaluatorAssessment = async (clientId: string, evaluatorData: a
   } catch (error: any) {
     console.error('Error saving evaluator assessment:', error);
     
-    // Provide more helpful error messages for network issues
     if (isNetworkError(error)) {
       throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
     }
@@ -825,7 +871,6 @@ export const saveEvaluatorAssessment = async (clientId: string, evaluatorData: a
 
 export const getEvaluatorAssessment = async (clientId: string) => {
   try {
-    // Check cache first
     const cachedAssessment = getFromCache('evaluatorAssessments', clientId);
     if (cachedAssessment) {
       return cachedAssessment;
@@ -840,7 +885,6 @@ export const getEvaluatorAssessment = async (clientId: string) => {
       
       if (error) throw error;
       
-      // Cache the result
       addToCache('evaluatorAssessments', clientId, data);
       
       return data;
@@ -853,7 +897,6 @@ export const getEvaluatorAssessment = async (clientId: string) => {
   } catch (error: any) {
     console.error('Error fetching evaluator assessment:', error);
     
-    // Provide more helpful error messages for network issues
     if (isNetworkError(error)) {
       throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
     }
@@ -866,7 +909,6 @@ export const getEvaluatorAssessment = async (clientId: string) => {
 export const saveGeneratedReport = async (clientId: string, reportContent: string, recommendations: { school: string, parents: string }) => {
   try {
     try {
-      // First check if there's an existing report for this client
       const { data: existingReport, error: fetchError } = await supabase
         .from('generated_reports')
         .select('id')
@@ -876,7 +918,6 @@ export const saveGeneratedReport = async (clientId: string, reportContent: strin
       if (fetchError) throw fetchError;
       
       if (existingReport) {
-        // Update existing report
         const { data, error } = await supabase
           .from('generated_reports')
           .update({
@@ -890,12 +931,10 @@ export const saveGeneratedReport = async (clientId: string, reportContent: strin
         
         if (error) throw error;
         
-        // Invalidate cache
         invalidateCache('reports', clientId);
         
         return data[0];
       } else {
-        // Create new report
         const { data, error } = await supabase
           .from('generated_reports')
           .insert({
@@ -908,10 +947,7 @@ export const saveGeneratedReport = async (clientId: string, reportContent: strin
         
         if (error) throw error;
         
-        // Invalidate cache
         invalidateCache('reports', clientId);
-        
-        
         
         return data[0];
       }
@@ -934,7 +970,6 @@ export const saveGeneratedReport = async (clientId: string, reportContent: strin
 
 export const getGeneratedReport = async (clientId: string) => {
   try {
-    // Check cache first
     const cachedReport = getFromCache('reports', clientId);
     if (cachedReport) {
       return cachedReport;
@@ -949,7 +984,6 @@ export const getGeneratedReport = async (clientId: string) => {
       
       if (error) throw error;
       
-      // Cache the result
       addToCache('reports', clientId, data);
       
       return data;
@@ -981,7 +1015,6 @@ export const finalizeReport = async (clientId: string) => {
       
       if (error) throw error;
       
-      // Invalidate cache
       invalidateCache('reports', clientId);
       
       return data[0];

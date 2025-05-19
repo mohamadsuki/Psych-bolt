@@ -12,9 +12,10 @@ export interface Therapist {
 // Retry configuration
 const RETRY_COUNT = 3;
 const INITIAL_DELAY = 1000; // 1 second
+const MAX_DELAY = 5000; // 5 seconds
 
 /**
- * Implements exponential backoff retry logic
+ * Implements exponential backoff retry logic with jitter
  * @param fn Function to retry
  * @param retries Number of retries
  * @param delay Initial delay in ms
@@ -31,8 +32,12 @@ const withRetry = async <T>(
       throw error;
     }
     
+    // Add jitter to prevent thundering herd
+    const jitter = Math.random() * 200;
+    const nextDelay = Math.min(delay * 2 + jitter, MAX_DELAY);
+    
     await new Promise(resolve => setTimeout(resolve, delay));
-    return withRetry(fn, retries - 1, delay * 2);
+    return withRetry(fn, retries - 1, nextDelay);
   }
 };
 
@@ -43,6 +48,11 @@ const withRetry = async <T>(
  */
 export const checkAuthCode = async (code: string): Promise<Therapist | null> => {
   try {
+    // Check network connectivity first
+    if (!navigator.onLine) {
+      throw new Error('אין חיבור לאינטרנט. נא לבדוק את החיבור ולנסות שוב.');
+    }
+
     // Wrap the database query in retry logic
     const { data, error } = await withRetry(async () => {
       return await supabase
@@ -55,6 +65,9 @@ export const checkAuthCode = async (code: string): Promise<Therapist | null> => 
 
     if (error) {
       console.error('Auth check error:', error);
+      if (error.message?.includes('Failed to fetch')) {
+        throw new Error('בעיית תקשורת. בודק חיבור לאינטרנט ומנסה שוב...');
+      }
       throw error;
     }
 
@@ -82,6 +95,7 @@ export const checkAuthCode = async (code: string): Promise<Therapist | null> => 
         localStorage.setItem('therapist', JSON.stringify(therapist));
       } catch (storageError) {
         console.warn('Failed to store therapist data:', storageError);
+        // If localStorage fails, we can still proceed with the session
       }
       
       return therapist;
@@ -91,9 +105,14 @@ export const checkAuthCode = async (code: string): Promise<Therapist | null> => 
   } catch (error: any) {
     console.error('Error during authentication:', error);
     
-    // Handle network errors with a user-friendly message
+    // Enhanced network error handling
     if (isNetworkError(error)) {
-      throw new Error('בעיית תקשורת. בודק חיבור לאינטרנט ומנסה שוב...');
+      throw new Error(
+        'בעיית תקשורת. נא לוודא:\n' +
+        '1. חיבור לאינטרנט תקין\n' +
+        '2. חומת אש או VPN לא חוסמים את החיבור\n' +
+        'המערכת תנסה להתחבר שוב אוטומטית...'
+      );
     }
     
     throw error;
@@ -111,6 +130,7 @@ export const getCurrentTherapist = (): Therapist | null => {
       return JSON.parse(storedTherapist);
     } catch (e) {
       console.error('Error parsing stored therapist data:', e);
+      localStorage.removeItem('therapist'); // Clear invalid data
       return null;
     }
   }

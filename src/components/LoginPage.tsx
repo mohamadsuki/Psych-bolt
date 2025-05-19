@@ -11,6 +11,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [code, setCode] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [retryCount, setRetryCount] = useState<number>(0);
   const [logoAnimationComplete, setLogoAnimationComplete] = useState<boolean>(false);
   const navigate = useNavigate();
 
@@ -30,8 +31,20 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     return () => clearTimeout(timer);
   }, [navigate, onLoginSuccess]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Auto-retry on network status change
+  useEffect(() => {
+    const handleOnline = () => {
+      if (error && code) {
+        handleSubmit(null, true);
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [error, code]);
+
+  const handleSubmit = async (e: React.FormEvent | null, isRetry = false) => {
+    if (e) e.preventDefault();
     
     // Clear any previous errors
     setError(null);
@@ -41,12 +54,25 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       return;
     }
 
+    // Don't proceed if we're offline
+    if (!navigator.onLine) {
+      setError(
+        <div className="flex items-center">
+          <WifiOff size={18} className="ml-2 flex-shrink-0" />
+          <span>אין חיבור לאינטרנט. נא לבדוק את החיבור ולנסות שוב.</span>
+        </div>
+      );
+      return;
+    }
+
     try {
       setLoading(true);
       
       const therapist = await checkAuthCode(code);
       
       if (therapist) {
+        // Reset retry count on success
+        setRetryCount(0);
         // Successfully authenticated - therapist data is already stored in localStorage
         if (onLoginSuccess) onLoginSuccess();
         navigate('/');
@@ -55,12 +81,22 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      // Use the error message from the API if available
+      
       const isNetworkError = err.message?.includes('בעיית תקשורת');
+      
+      if (isNetworkError && retryCount < 3 && !isRetry) {
+        // Increment retry count
+        setRetryCount(prev => prev + 1);
+        
+        // Auto-retry with exponential backoff
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 5000);
+        setTimeout(() => handleSubmit(null, true), delay);
+      }
+      
       setError(
         <div className="flex items-center">
           {isNetworkError && <WifiOff size={18} className="ml-2 flex-shrink-0" />}
-          <span>{err.message || 'שגיאה בהתחברות. נא לנסות שוב מאוחר יותר.'}</span>
+          <span className="whitespace-pre-line">{err.message || 'שגיאה בהתחברות. נא לנסות שוב מאוחר יותר.'}</span>
         </div>
       );
     } finally {
@@ -136,7 +172,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             {loading ? (
               <>
                 <Loader size={20} className="animate-spin ml-2" />
-                מתחבר...
+                {retryCount > 0 ? `מנסה להתחבר... (ניסיון ${retryCount}/3)` : 'מתחבר...'}
               </>
             ) : (
               'התחבר'

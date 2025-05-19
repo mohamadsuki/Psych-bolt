@@ -610,6 +610,80 @@ export const getClientByIdNumber = async (idNumber: string) => {
   }
 };
 
+// Add createClientRecord function after getClientByIdNumber
+export const createClientRecord = async (childData: any) => {
+  try {
+    // Validate ID number if provided
+    if (childData.idNumber && !/^\d{9}$/.test(childData.idNumber)) {
+      throw new Error('מספר תעודת זהות חייב להיות 9 ספרות');
+    }
+    
+    // Check if ID number already exists
+    if (childData.idNumber) {
+      try {
+        const { data: existingClient, error: fetchError } = await supabase
+          .from('clients')
+          .select('id')
+          .eq('id_number', childData.idNumber)
+          .maybeSingle();
+        
+        if (fetchError) throw fetchError;
+        
+        if (existingClient) {
+          throw new Error('מספר תעודת זהות כבר קיים במערכת.');
+        }
+      } catch (checkError) {
+        if (isNetworkError(checkError)) {
+          throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+        }
+        throw checkError;
+      }
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .insert({
+          id_number: childData.idNumber || null,
+          child_first_name: childData.firstName,
+          child_last_name: childData.lastName,
+          child_dob: childData.dob,
+          parent_name: childData.parentName,
+          parent_email: childData.parentEmail || null,
+          parent_phone: childData.parentPhone,
+          address: childData.address,
+          therapist_id: childData.therapistId || null
+        })
+        .select();
+      
+      if (error) {
+        console.error('Insert error details:', error);
+        
+        if (error.message?.includes('violates row-level security policy')) {
+          throw new Error('Permission denied. Please ensure you are logged in to create client records.');
+        }
+        throw error;
+      }
+      
+      // Return the first item of the data array
+      return data[0];
+    } catch (insertError) {
+      if (isNetworkError(insertError)) {
+        throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+      }
+      throw insertError;
+    }
+  } catch (error: any) {
+    console.error('Error creating client:', error);
+    
+    if (isNetworkError(error)) {
+      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+    }
+    
+    throw error;
+  }
+};
+
 // Parent intake functions
 export const saveParentIntake = async (clientId: string, formData: any, isSubmitted: boolean = false) => {
   try {
@@ -814,7 +888,6 @@ export const saveEvaluatorAssessment = async (clientId: string, evaluatorData: a
   } catch (error: any) {
     console.error('Error saving evaluator assessment:', error);
     
-    // Provide more helpful error messages for network issues
     if (isNetworkError(error)) {
       throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
     }
@@ -853,7 +926,6 @@ export const getEvaluatorAssessment = async (clientId: string) => {
   } catch (error: any) {
     console.error('Error fetching evaluator assessment:', error);
     
-    // Provide more helpful error messages for network issues
     if (isNetworkError(error)) {
       throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
     }

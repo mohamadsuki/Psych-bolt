@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { checkAuthCode } from '../lib/auth';
-import { FileText, Users, Shield, AlertCircle, Loader } from 'lucide-react';
+import { FileText, Users, Shield, AlertCircle, Loader, WifiOff } from 'lucide-react';
 
 interface LoginPageProps {
   onLoginSuccess?: () => void;
@@ -56,7 +56,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     } catch (err: any) {
       console.error('Login error:', err);
       // Use the error message from the API if available
-      setError(err.message || 'שגיאה בהתחברות. נא לנסות שוב מאוחר יותר.');
+      const isNetworkError = err.message?.includes('בעיית תקשורת');
+      setError(
+        <div className="flex items-center">
+          {isNetworkError && <WifiOff size={18} className="ml-2 flex-shrink-0" />}
+          <span>{err.message || 'שגיאה בהתחברות. נא לנסות שוב מאוחר יותר.'}</span>
+        </div>
+      );
     } finally {
       setLoading(false);
     }
@@ -93,8 +99,14 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         
         {error && (
           <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg flex items-start">
-            <AlertCircle className="ml-2 mt-0.5 flex-shrink-0" size={18} />
-            <span>{error}</span>
+            {typeof error === 'string' ? (
+              <>
+                <AlertCircle className="ml-2 mt-0.5 flex-shrink-0" size={18} />
+                <span>{error}</span>
+              </>
+            ) : (
+              error
+            )}
           </div>
         )}
         

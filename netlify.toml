@@ -3,18 +3,13 @@
   publish = "dist"
 
 [build.environment]
-  NODE_VERSION = "20.11.1"
-  VITE_SUPABASE_URL = "$VITE_SUPABASE_URL"
-  VITE_SUPABASE_ANON_KEY = "$VITE_SUPABASE_ANON_KEY"
+  NODE_VERSION = "20.11.1" 
+  VITE_SUPABASE_URL = "${{ env.SUPABASE_URL }}"
+  VITE_SUPABASE_ANON_KEY = "${{ env.SUPABASE_ANON_KEY }}"
 
 [[redirects]]
   from = "/*"
   to = "/index.html"
-  status = 200
-
-[[redirects]]
-  from = "/.netlify/functions/*"
-  to = "/.netlify/functions/:splat"
   status = 200
 
 [[headers]]
@@ -25,7 +20,7 @@
 [[headers]]
   for = "/*"
   [headers.values]
-    Content-Security-Policy = "frame-ancestors 'none'; default-src 'self' https://*.supabase.co; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.pexels.com https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.netlify.app;"
+    Content-Security-Policy = "frame-ancestors 'none'; default-src 'self' https://*.supabase.co; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.pexels.com https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.netlify.app https://api.netlify.com;"
     Access-Control-Allow-Origin = "*"
     Access-Control-Allow-Methods = "GET, POST, PUT, DELETE, OPTIONS"
     Access-Control-Allow-Headers = "Content-Type, Authorization, apikey, X-Client-Info"

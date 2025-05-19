@@ -25,14 +25,15 @@ const checkConnectivity = async (): Promise<boolean> => {
 
     // Try to make a lightweight request to Supabase health check endpoint with timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), CONNECTIVITY_TIMEOUT);
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // Increased timeout
 
     try {
       const response = await fetch(`${supabase.supabaseUrl}/rest/v1/`, {
         method: 'HEAD',
         headers: {
           'apikey': supabase.supabaseKey,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Client-Info': `supabase-js/${process.env.npm_package_version || 'unknown'}`
         },
         signal: controller.signal
       });

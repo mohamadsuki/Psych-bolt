@@ -74,7 +74,7 @@ export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as s
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    detectSessionInUrl: true, // Important for OAuth flows
     storageKey: 'supabase.auth.token',
     storage: {
       getItem: (key) => {
@@ -101,29 +101,21 @@ export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as s
     }
   },
   global: {
+    // Using default fetch - let Supabase handle retries and timeouts
     headers: {
-      'X-Client-Info': 'supabase-js',
-      'Cache-Control': 'no-cache'
+      // Add headers that might help with CORS in production
+      'X-Client-Info': 'supabase-js'
     },
     // Add fetch options for better performance
     fetch: (url, options) => {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
-      // Add CORS mode and credentials with better defaults
       return fetch(url, {
         ...options,
         signal: controller.signal,
         keepalive: true,
-        cache: 'default',
-        mode: 'cors',
-        credentials: 'include',
-        headers: {
-          ...options?.headers,
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'X-Client-Info': `supabase-js/${process.env.npm_package_version || 'unknown'}`
-        }
+        cache: 'default'
       }).finally(() => clearTimeout(timeoutId));
     }
   },
@@ -618,80 +610,6 @@ export const getClientByIdNumber = async (idNumber: string) => {
   }
 };
 
-// Add createClientRecord function after getClientByIdNumber
-export const createClientRecord = async (childData: any) => {
-  try {
-    // Validate ID number if provided
-    if (childData.idNumber && !/^\d{9}$/.test(childData.idNumber)) {
-      throw new Error('מספר תעודת זהות חייב להיות 9 ספרות');
-    }
-    
-    // Check if ID number already exists
-    if (childData.idNumber) {
-      try {
-        const { data: existingClient, error: fetchError } = await supabase
-          .from('clients')
-          .select('id')
-          .eq('id_number', childData.idNumber)
-          .maybeSingle();
-        
-        if (fetchError) throw fetchError;
-        
-        if (existingClient) {
-          throw new Error('מספר תעודת זהות כבר קיים במערכת.');
-        }
-      } catch (checkError) {
-        if (isNetworkError(checkError)) {
-          throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
-        }
-        throw checkError;
-      }
-    }
-    
-    try {
-      const { data, error } = await supabase
-        .from('clients')
-        .insert({
-          id_number: childData.idNumber || null,
-          child_first_name: childData.firstName,
-          child_last_name: childData.lastName,
-          child_dob: childData.dob,
-          parent_name: childData.parentName,
-          parent_email: childData.parentEmail || null,
-          parent_phone: childData.parentPhone,
-          address: childData.address,
-          therapist_id: childData.therapistId || null
-        })
-        .select();
-      
-      if (error) {
-        console.error('Insert error details:', error);
-        
-        if (error.message?.includes('violates row-level security policy')) {
-          throw new Error('Permission denied. Please ensure you are logged in to create client records.');
-        }
-        throw error;
-      }
-      
-      // Return the first item of the data array
-      return data[0];
-    } catch (insertError) {
-      if (isNetworkError(insertError)) {
-        throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
-      }
-      throw insertError;
-    }
-  } catch (error: any) {
-    console.error('Error creating client:', error);
-    
-    if (isNetworkError(error)) {
-      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
-    }
-    
-    throw error;
-  }
-};
-
 // Parent intake functions
 export const saveParentIntake = async (clientId: string, formData: any, isSubmitted: boolean = false) => {
   try {
@@ -896,6 +814,7 @@ export const saveEvaluatorAssessment = async (clientId: string, evaluatorData: a
   } catch (error: any) {
     console.error('Error saving evaluator assessment:', error);
     
+    // Provide more helpful error messages for network issues
     if (isNetworkError(error)) {
       throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
     }
@@ -917,7 +836,6 @@ export const getEvaluatorAssessment = async (clientId: string) => {
         .from('evaluator_assessments')
         .select('*')
         .eq('client_id', clientId)
-        .order('created_at', { ascending: false })
         .maybeSingle();
       
       if (error) throw error;
@@ -935,6 +853,7 @@ export const getEvaluatorAssessment = async (clientId: string) => {
   } catch (error: any) {
     console.error('Error fetching evaluator assessment:', error);
     
+    // Provide more helpful error messages for network issues
     if (isNetworkError(error)) {
       throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
     }
@@ -991,6 +910,8 @@ export const saveGeneratedReport = async (clientId: string, reportContent: strin
         
         // Invalidate cache
         invalidateCache('reports', clientId);
+        
+        
         
         return data[0];
       }
@@ -1072,146 +993,6 @@ export const finalizeReport = async (clientId: string) => {
     }
   } catch (error: any) {
     console.error('Error finalizing report:', error);
-    
-    if (isNetworkError(error)) {
-      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
-    }
-    
-    throw error;
-  }
-};
-
-// Therapist management functions
-export const getTherapists = async () => {
-  try {
-    // Check cache first
-    const cachedTherapists = getFromCache('therapists', 'all');
-    if (cachedTherapists) {
-      return cachedTherapists;
-    }
-
-    const { data, error } = await withRetry(async () => {
-      return await supabase
-        .from('therapists')
-        .select('*')
-        .order('name');
-    });
-
-    if (error) throw error;
-
-    // Cache results
-    addToCache('therapists', 'all', data);
-
-    return data || [];
-  } catch (error: any) {
-    console.error('Error fetching therapists:', error);
-    
-    if (isNetworkError(error)) {
-      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
-    }
-    
-    throw error;
-  }
-};
-
-export const createTherapist = async (therapistData: any) => {
-  try {
-    // Validate required fields
-    if (!therapistData.name || !therapistData.code) {
-      throw new Error('שם וקוד גישה הם שדות חובה');
-    }
-
-    // Check if this is an update or create
-    const isUpdate = !!therapistData.id;
-
-    let result;
-    if (isUpdate) {
-      const { data, error } = await supabase
-        .from('therapists')
-        .update({
-          name: therapistData.name,
-          code: therapistData.code,
-          active: therapistData.active !== false
-        })
-        .eq('id', therapistData.id)
-        .select();
-
-      if (error) throw error;
-      result = data?.[0];
-    } else {
-      const { data, error } = await supabase
-        .from('therapists')
-        .insert({
-          name: therapistData.name,
-          code: therapistData.code,
-          active: true
-        })
-        .select();
-
-      if (error) throw error;
-      result = data?.[0];
-    }
-
-    // Invalidate cache
-    invalidateCache('therapists');
-
-    return result;
-  } catch (error: any) {
-    console.error('Error creating/updating therapist:', error);
-    
-    if (error.message?.includes('therapists_code_key')) {
-      throw new Error('קוד גישה זה כבר קיים במערכת');
-    }
-    
-    if (isNetworkError(error)) {
-      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
-    }
-    
-    throw error;
-  }
-};
-
-export const deleteTherapist = async (id: string) => {
-  try {
-    const { error } = await supabase
-      .from('therapists')
-      .delete()
-      .eq('id', id);
-
-    if (error) throw error;
-
-    // Invalidate cache
-    invalidateCache('therapists');
-
-    return { success: true };
-  } catch (error: any) {
-    console.error('Error deleting therapist:', error);
-    
-    if (isNetworkError(error)) {
-      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
-    }
-    
-    throw error;
-  }
-};
-
-export const updateClientTherapist = async (clientId: string, therapistId: string) => {
-  try {
-    const { data, error } = await supabase
-      .from('clients')
-      .update({ therapist_id: therapistId })
-      .eq('id', clientId)
-      .select();
-
-    if (error) throw error;
-
-    // Invalidate relevant caches
-    invalidateCache('clients');
-    invalidateCache('clients', clientId);
-
-    return data?.[0];
-  } catch (error: any) {
-    console.error('Error updating client therapist:', error);
     
     if (isNetworkError(error)) {
       throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');

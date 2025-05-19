@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { checkAuthCode } from '../lib/auth';
-import { FileText, Users, Shield, AlertCircle, Loader, WifiOff, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { FileText, Users, Shield, AlertCircle, Loader } from 'lucide-react';
 
 interface LoginPageProps {
   onLoginSuccess?: () => void;
@@ -11,11 +11,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [code, setCode] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
-  const [retryCount, setRetryCount] = useState<number>(0);
   const [logoAnimationComplete, setLogoAnimationComplete] = useState<boolean>(false);
-  const [networkStatus, setNetworkStatus] = useState<'online' | 'offline'>(
-    navigator.onLine ? 'online' : 'offline'
-  );
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -34,156 +30,34 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     return () => clearTimeout(timer);
   }, [navigate, onLoginSuccess]);
 
-  // Monitor network status changes
-  useEffect(() => {
-    const handleOnline = () => {
-      setNetworkStatus('online');
-      if (error && code) {
-        handleSubmit(null, true);
-      }
-    };
-
-    const handleOffline = () => {
-      setNetworkStatus('offline');
-      setError(
-        <div className="flex flex-col space-y-3">
-          <div className="flex items-center text-red-600">
-            <WifiOff size={18} className="ml-2 flex-shrink-0" />
-            <span>אין חיבור לאינטרנט</span>
-          </div>
-          <ul className="text-sm list-disc list-inside space-y-1 text-gray-600">
-            <li>נא לוודא שיש חיבור פעיל לאינטרנט</li>
-            <li>בדוק את הגדרות הרשת או ה-WiFi</li>
-            <li>נסה להתחבר שוב כשהחיבור יתחדש</li>
-          </ul>
-        </div>
-      );
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, [error, code]);
-
-  const handleManualRetry = () => {
-    if (code) {
-      setRetryCount(0); // Reset retry count for manual retry
-      handleSubmit(null, true);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent | null, isRetry = false) => {
-    if (e) e.preventDefault();
-    
-    // Clear any previous errors
-    setError(null);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     
     if (!code.trim()) {
       setError('נא להזין קוד גישה');
       return;
     }
 
-    // Don't proceed if we're offline
-    if (!navigator.onLine) {
-      setError(
-        <div className="flex flex-col space-y-3">
-          <div className="flex items-center text-red-600">
-            <WifiOff size={18} className="ml-2 flex-shrink-0" />
-            <span>אין חיבור לאינטרנט</span>
-          </div>
-          <ul className="text-sm list-disc list-inside space-y-1 text-gray-600">
-            <li>נא לוודא שיש חיבור פעיל לאינטרנט</li>
-            <li>בדוק את הגדרות הרשת או ה-WiFi</li>
-            <li>נסה להתחבר שוב כשהחיבור יתחדש</li>
-          </ul>
-        </div>
-      );
-      return;
-    }
-
     try {
       setLoading(true);
+      setError(null);
       
+      console.log('Attempting to load client data for ID number:', id);
+
       const therapist = await checkAuthCode(code);
       
       if (therapist) {
-        // Reset retry count on success
-        setRetryCount(0);
-        // Show success message briefly before redirecting
-        setError(
-          <div className="flex items-center text-green-600">
-            <CheckCircle2 size={18} className="ml-2 flex-shrink-0" />
-            <span>התחברות בוצעה בהצלחה</span>
-          </div>
-        );
-        // Successfully authenticated - therapist data is already stored in localStorage
-        setTimeout(() => {
-          if (onLoginSuccess) onLoginSuccess();
-          navigate('/');
-        }, 500);
+        // Successfully authenticated
+        localStorage.setItem('therapist', JSON.stringify(therapist));
+        if (onLoginSuccess) onLoginSuccess();
+        navigate('/');
       } else {
         setError('קוד גישה שגוי, נא לנסות שוב');
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      
-      const isNetworkError = err.message?.includes('בעיית תקשורת') || 
-                            err.message?.includes('חיבור לשרת') ||
-                            err.name === 'NetworkError';
-      
-      if (isNetworkError && retryCount < 3 && !isRetry) {
-        // Increment retry count
-        setRetryCount(prev => prev + 1);
-        
-        // Auto-retry with exponential backoff
-        const delay = Math.min(1000 * Math.pow(2, retryCount), 5000);
-        setTimeout(() => handleSubmit(null, true), delay);
-        
-        setError(
-          <div className="flex flex-col space-y-3">
-            <div className="flex items-center text-orange-600">
-              <AlertCircle size={18} className="ml-2 flex-shrink-0" />
-              <span>בעיית תקשורת עם השרת. מנסה להתחבר שוב...</span>
-            </div>
-            <ul className="text-sm list-disc list-inside space-y-1 text-gray-600">
-              <li>וודא שיש לך חיבור יציב לאינטרנט</li>
-              <li>בדוק שאין חסימה של חומת אש (Firewall)</li>
-              <li>נסה לרענן את הדף ולהתחבר שוב</li>
-            </ul>
-          </div>
-        );
-      } else {
-        setError(
-          <div className="flex flex-col space-y-3">
-            <div className="flex items-center">
-              <AlertCircle size={18} className="ml-2 flex-shrink-0 text-red-600" />
-              <span className="text-red-600">
-                {isNetworkError ? 'לא ניתן להתחבר לשרת' : 'שגיאה בהתחברות'}
-              </span>
-            </div>
-            <ul className="text-sm list-disc list-inside space-y-1 text-gray-600">
-              <li>וודא שיש לך חיבור יציב לאינטרנט</li>
-              <li>בדוק שאין חסימה של חומת אש (Firewall)</li>
-              <li>נסה שוב מאוחר יותר</li>
-              {isNetworkError && (
-                <li className="mt-2">
-                  <button
-                    onClick={handleManualRetry}
-                    className="flex items-center text-blue-600 hover:text-blue-700"
-                  >
-                    <RefreshCw size={16} className="ml-1" />
-                    נסה להתחבר שוב
-                  </button>
-                </li>
-              )}
-            </ul>
-          </div>
-        );
-      }
+      // More user-friendly error message that doesn't mention connectivity issues
+      setError('שגיאה בהתחברות. נא לנסות שוב מאוחר יותר.');
     } finally {
       setLoading(false);
     }
@@ -219,15 +93,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         <h2 className="text-xl font-bold text-center mb-6">התחברות למערכת</h2>
         
         {error && (
-          <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-            {typeof error === 'string' ? (
-              <div className="flex items-center text-red-600">
-                <AlertCircle className="ml-2 flex-shrink-0" size={18} />
-                <span>{error}</span>
-              </div>
-            ) : (
-              error
-            )}
+          <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg flex items-start">
+            <AlertCircle className="ml-2 mt-0.5 flex-shrink-0" size={18} />
+            <span>{error}</span>
           </div>
         )}
         
@@ -251,17 +119,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           
           <button
             type="submit"
-            disabled={loading || networkStatus === 'offline'}
-            className={`w-full py-3 ${
-              networkStatus === 'offline'
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700'
-            } text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 flex items-center justify-center`}
+            disabled={loading}
+            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 flex items-center justify-center"
           >
             {loading ? (
               <>
                 <Loader size={20} className="animate-spin ml-2" />
-                {retryCount > 0 ? `מנסה להתחבר... (ניסיון ${retryCount}/3)` : 'מתחבר...'}
+                מתחבר...
               </>
             ) : (
               'התחבר'

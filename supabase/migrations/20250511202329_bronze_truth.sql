@@ -1,20 +1,19 @@
 /*
-  # Initial Schema Setup with Policy Checks
-
-  1. Tables Created
-    - therapists: Stores therapist records with authentication codes
-    - clients: Stores client/patient information
-    - parent_intakes: Stores parent questionnaire responses
-    - evaluator_assessments: Stores psychologist evaluation data
-    - generated_reports: Stores generated assessment reports
-
-  2. Security
+  # Fix database schema with policy checks
+  
+  1. Tables
+    - Create therapists table with updated_at trigger
+    - Create clients table with foreign key to therapists
+    - Create parent_intakes table for form data
+    - Create evaluator_assessments table
+    - Create generated_reports table
+    
+  2. Indexes
+    - Add indexes for therapist_id, code, and active status
+    
+  3. Security
     - Enable RLS on all tables
-    - Add policies with existence checks
-    - Add constraints and validations
-
-  3. Indexes
-    - Create indexes for performance optimization
+    - Add policies with IF NOT EXISTS checks
 */
 
 -- Create therapists table
@@ -92,69 +91,49 @@ ALTER TABLE parent_intakes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE evaluator_assessments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE generated_reports ENABLE ROW LEVEL SECURITY;
 
--- Create RLS policies with existence checks
-DO $$
+-- Drop existing policies if they exist
+DO $$ 
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies 
-    WHERE tablename = 'therapists' 
-    AND policyname = 'Allow all operations without authentication'
-  ) THEN
-    CREATE POLICY "Allow all operations without authentication" 
-      ON therapists FOR ALL 
-      TO anon, authenticated 
-      USING (true) 
-      WITH CHECK (true);
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies 
-    WHERE tablename = 'clients' 
-    AND policyname = 'Allow all operations without authentication'
-  ) THEN
-    CREATE POLICY "Allow all operations without authentication" 
-      ON clients FOR ALL 
-      TO anon, authenticated 
-      USING (true) 
-      WITH CHECK (true);
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies 
-    WHERE tablename = 'parent_intakes' 
-    AND policyname = 'Allow all operations without authentication'
-  ) THEN
-    CREATE POLICY "Allow all operations without authentication" 
-      ON parent_intakes FOR ALL 
-      TO anon, authenticated 
-      USING (true) 
-      WITH CHECK (true);
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies 
-    WHERE tablename = 'evaluator_assessments' 
-    AND policyname = 'Allow all operations without authentication'
-  ) THEN
-    CREATE POLICY "Allow all operations without authentication" 
-      ON evaluator_assessments FOR ALL 
-      TO anon, authenticated 
-      USING (true) 
-      WITH CHECK (true);
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies 
-    WHERE tablename = 'generated_reports' 
-    AND policyname = 'Allow all operations without authentication'
-  ) THEN
-    CREATE POLICY "Allow all operations without authentication" 
-      ON generated_reports FOR ALL 
-      TO anon, authenticated 
-      USING (true) 
-      WITH CHECK (true);
-  END IF;
+  DROP POLICY IF EXISTS "Allow all operations without authentication" ON therapists;
+  DROP POLICY IF EXISTS "Allow all operations without authentication" ON clients;
+  DROP POLICY IF EXISTS "Allow all operations without authentication" ON parent_intakes;
+  DROP POLICY IF EXISTS "Allow all operations without authentication" ON evaluator_assessments;
+  DROP POLICY IF EXISTS "Allow all operations without authentication" ON generated_reports;
+EXCEPTION
+  WHEN undefined_object THEN
+    NULL;
 END $$;
+
+-- Create RLS policies
+CREATE POLICY "Allow all operations without authentication" 
+  ON therapists FOR ALL 
+  TO anon, authenticated 
+  USING (true) 
+  WITH CHECK (true);
+
+CREATE POLICY "Allow all operations without authentication" 
+  ON clients FOR ALL 
+  TO anon, authenticated 
+  USING (true) 
+  WITH CHECK (true);
+
+CREATE POLICY "Allow all operations without authentication" 
+  ON parent_intakes FOR ALL 
+  TO anon, authenticated 
+  USING (true) 
+  WITH CHECK (true);
+
+CREATE POLICY "Allow all operations without authentication" 
+  ON evaluator_assessments FOR ALL 
+  TO anon, authenticated 
+  USING (true) 
+  WITH CHECK (true);
+
+CREATE POLICY "Allow all operations without authentication" 
+  ON generated_reports FOR ALL 
+  TO anon, authenticated 
+  USING (true) 
+  WITH CHECK (true);
 
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_therapists_updated_at()

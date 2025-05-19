@@ -21,10 +21,10 @@ const container = document.getElementById('root');
 if (container) {
   const root = createRoot(container);
   root.render(
-    <BrowserRouter>
-      <Suspense fallback={<LoadingApp />}>
+    <Suspense fallback={<LoadingApp />}>
+      <BrowserRouter>
         <App />
-      </Suspense>
-    </BrowserRouter>
+      </BrowserRouter>
+    </Suspense>
   );
 }

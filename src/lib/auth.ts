@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { isNetworkError } from './db-utils';
 
 // Type definition for Therapist
 export interface Therapist {
@@ -115,7 +116,3 @@ export const isAdmin = (): boolean => {
   const therapist = getCurrentTherapist();
   return therapist?.is_admin || therapist?.code === 'admin123' || false;
 };
-
-// Get Supabase URL and key from environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;

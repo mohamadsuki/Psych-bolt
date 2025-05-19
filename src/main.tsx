@@ -4,7 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 
 // Lazy load the main App component
-const App = lazy(() => import('./App.tsx'));
+const App = lazy(() => import('./App'));
 
 // Loading component
 const LoadingApp = () => (
@@ -15,3 +15,16 @@ const LoadingApp = () => (
     </div>
   </div>
 );
+
+// Initialize the app
+const container = document.getElementById('root');
+if (container) {
+  const root = createRoot(container);
+  root.render(
+    <BrowserRouter>
+      <Suspense fallback={<LoadingApp />}>
+        <App />
+      </Suspense>
+    </BrowserRouter>
+  );
+}

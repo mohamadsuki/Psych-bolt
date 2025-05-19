@@ -4,8 +4,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
-    include: ['@supabase/supabase-js', 'react', 'react-dom', 'react-router-dom'],
-    exclude: ['lucide-react']
+    include: ['@supabase/supabase-js', 'react', 'react-dom', 'react-router-dom', 'lucide-react']
   },
   build: {
     cssCodeSplit: true,

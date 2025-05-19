@@ -930,8 +930,7 @@ export const saveEvaluatorAssessment = async (clientId: string, evaluatorData: a
   }
 };
 
-export const getEvaluatorAssessment = async (clientI
-d: string) => {
+export const getEvaluatorAssessment = async (clientId: string) => {
   try {
     const cachedAssessment = getFromCache('evaluatorAssessments', clientId);
     if (cachedAssessment) {

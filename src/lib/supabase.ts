@@ -203,6 +203,67 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = MAX_RETRIES): Pro
   throw lastError;
 }
 
+// Add the missing createClientRecord function
+export const createClientRecord = async (childData: any) => {
+  try {
+    if (!childData.idNumber || !/^\d{9}$/.test(childData.idNumber)) {
+      throw new Error('מספר תעודת זהות חייב להיות 9 ספרות');
+    }
+
+    try {
+      const { data: existingClient, error: fetchError } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('id_number', childData.idNumber)
+        .maybeSingle();
+        
+      if (fetchError) throw fetchError;
+        
+      if (existingClient) {
+        throw new Error('מספר תעודת זהות כבר קיים במערכת.');
+      }
+    } catch (checkError) {
+      if (isNetworkError(checkError)) {
+        throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+      }
+      throw checkError;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .insert({
+          id_number: childData.idNumber,
+          child_first_name: childData.firstName,
+          child_last_name: childData.lastName,
+          child_dob: childData.dob,
+          parent_name: childData.parentName,
+          parent_email: childData.parentEmail || null,
+          parent_phone: childData.parentPhone,
+          address: childData.address
+        })
+        .select();
+      
+      if (error) throw error;
+      
+      return data[0];
+    } catch (insertError) {
+      if (isNetworkError(insertError)) {
+        throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+      }
+      throw insertError;
+    }
+  } catch (error: any) {
+    console.error('Error creating client:', error);
+    
+    if (isNetworkError(error)) {
+      throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+    }
+    
+    throw error;
+  }
+};
+
 // Therapist management functions
 export const getTherapists = async () => {
   try {
@@ -869,7 +930,8 @@ export const saveEvaluatorAssessment = async (clientId: string, evaluatorData: a
   }
 };
 
-export const getEvaluatorAssessment = async (clientId: string) => {
+export const getEvaluatorAssessment = async (clientI
+d: string) => {
   try {
     const cachedAssessment = getFromCache('evaluatorAssessments', clientId);
     if (cachedAssessment) {

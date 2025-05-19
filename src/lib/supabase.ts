@@ -909,6 +909,7 @@ export const getEvaluatorAssessment = async (clientId: string) => {
         .from('evaluator_assessments')
         .select('*')
         .eq('client_id', clientId)
+        .order('created_at', { ascending: false })
         .maybeSingle();
       
       if (error) throw error;

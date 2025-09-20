@@ -15,34 +15,17 @@ export interface Therapist {
  */
 export const checkAuthCode = async (code: string): Promise<Therapist | null> => {
   try {
-    // Check if we already have a session in localStorage
-    if (localStorage.getItem('supabase.auth.token')) {
-      return { isAuthenticated: true, success: true, error: null };
-    }
-
-    // Get the current session
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      // If we have a session, user is authenticated
-      if (session) {
-        return { isAuthenticated: true, success: true, error: null };
-      }
-    } catch (sessionError) {
-      console.error("Error getting auth session:", sessionError);
-      
-      if (isNetworkError(sessionError)) {
-        return { 
-          isAuthenticated: false, 
-          success: false, 
-          error: 'שגיאת תקשורת. נסה שוב מאוחר יותר.'
-        };
-      }
-      
-      // For other errors, continue with sign-in attempt
+    // Handle admin code as a special case
+    if (code === 'admin123') {
+      return {
+        id: 'admin',
+        name: 'מנהל מערכת',
+        code: 'admin123',
+        is_admin: true
+      };
     }
     
-    // Look up the therapist by code - Direct approach without connectivity checks
+    // Look up the therapist by code
     const { data, error } = await supabase
       .from('therapists')
       .select('*')
@@ -51,15 +34,19 @@ export const checkAuthCode = async (code: string): Promise<Therapist | null> => 
 
     if (error) {
       console.error('Auth check error:', error);
-      throw error;
+      
+      if (isNetworkError(error)) {
+        throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
+      }
+      
+      // For other database errors, return null (invalid code)
+      return null;
     }
 
     if (data) {
-      // Add is_admin flag based on code
-      const isAdmin = code === 'admin123';
       return {
         ...data,
-        is_admin: isAdmin
+        is_admin: false // Regular therapists are not admins
       };
     }
 
@@ -68,13 +55,12 @@ export const checkAuthCode = async (code: string): Promise<Therapist | null> => 
     console.error('Error during authentication:', error);
     
     // Handle network errors with a user-friendly message
-    if (error.message?.includes('Failed to fetch') ||
-        error.message?.includes('NetworkError') ||
-        error.message?.includes('Network Error')) {
+    if (isNetworkError(error)) {
       throw new Error('שגיאת תקשורת. נסה שוב מאוחר יותר.');
     }
     
-    throw error;
+    // For other errors, return null (invalid code)
+    return null;
   }
 };
 
@@ -118,3 +104,26 @@ export const isAdmin = (): boolean => {
 // Get Supabase URL and key from environment variables
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// Helper function to check network errors
+const isNetworkError = (error: any): boolean => {
+  if (!error) return false;
+  
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return true;
+  }
+  
+  const errorMsg = error.message || error.toString();
+  return !!(
+    errorMsg.includes('Failed to fetch') ||
+    errorMsg.includes('NetworkError') ||
+    errorMsg.includes('Network Error') ||
+    errorMsg.includes('network') ||
+    errorMsg.includes('timeout') ||
+    errorMsg.includes('abort') ||
+    errorMsg.includes('ECONNREFUSED') ||
+    errorMsg.includes('ETIMEDOUT') ||
+    error.name === 'AbortError' ||
+    error.name === 'TimeoutError'
+  );
+};

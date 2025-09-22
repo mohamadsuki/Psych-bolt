@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { checkAuthCode } from '../lib/auth';
-import { supabase } from '../lib/supabase';
 import { FileText, Users, Shield, AlertCircle, Loader } from 'lucide-react';
 
 interface LoginPageProps {

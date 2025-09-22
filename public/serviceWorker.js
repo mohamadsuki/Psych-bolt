@@ -2,10 +2,7 @@
 const CACHE_NAME = 'psycho-report-cache-v2';
 const urlsToCache = [
   '/',
-  '/index.html',
-  '/src/main.tsx',
-  '/src/App.tsx',
-  '/src/index.css'
+  '/index.html'
 ];
 
 // Install the service worker and cache the static assets
@@ -105,8 +102,8 @@ self.addEventListener('fetch', (event) => {
       return fetch(event.request, { 
         // Add credentials to ensure cookies are sent
         credentials: 'include',
-        // Important for CORS requests
-        mode: event.request.mode === 'cors' ? 'cors' : 'no-cors'
+        // Preserve original request mode
+        mode: event.request.mode
       })
       .then(response => {
         // Check if we received a valid response
@@ -172,7 +169,7 @@ function handleApiRequest(event) {
   event.respondWith(
     fetch(event.request, {
       credentials: 'include',
-      mode: event.request.mode === 'cors' ? 'cors' : 'no-cors',
+      mode: event.request.mode,
       // Add a longer timeout for API requests
       signal: AbortSignal.timeout(10000) // 10 second timeout
     })

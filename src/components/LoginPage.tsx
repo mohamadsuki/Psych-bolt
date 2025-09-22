@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { checkAuthCode } from '../lib/auth';
+import { supabase } from '../lib/supabase';
 import { FileText, Users, Shield, AlertCircle, Loader } from 'lucide-react';
 
 interface LoginPageProps {
@@ -41,12 +42,28 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     // COMPLETE ISOLATION FOR ADMIN CODE - NO NETWORK CALLS AT ALL
     if (code.trim() === 'admin123') {
       try {
+        setLoading(true);
         console.log('Admin code detected, logging in immediately');
+        
+        // Authenticate with Supabase using admin credentials
+        // NOTE: Replace these with actual admin credentials from your Supabase Auth users
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: 'admin@example.com', // Replace with actual admin email
+          password: 'adminpassword123' // Replace with actual admin password
+        });
+        
+        if (error) {
+          console.error('Admin Supabase authentication error:', error);
+          setError('שגיאה באימות מנהל המערכת. נא לוודא שהמשתמש קיים ב-Supabase Auth.');
+          return;
+        }
+        
         const adminUser = {
           id: 'admin',
           name: 'מנהל מערכת',
           code: 'admin123',
-          is_admin: true
+          is_admin: true,
+          supabase_user_id: data.user?.id
         };
         
         localStorage.setItem('therapist', JSON.stringify(adminUser));
@@ -62,6 +79,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         console.error('Admin login error:', err);
         setError('שגיאה בהתחברות למנהל. נסה לרענן את הדף ולנסות שוב.');
         return;
+      } finally {
+        setLoading(false);
       }
     }
 

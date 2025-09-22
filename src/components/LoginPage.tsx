@@ -38,6 +38,22 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       return;
     }
 
+    // Special immediate handling for admin code - no async calls needed
+    if (code.trim() === 'admin123') {
+      console.log('Admin code detected, logging in immediately');
+      const adminUser = {
+        id: 'admin',
+        name: 'מנהל מערכת',
+        code: 'admin123',
+        is_admin: true
+      };
+      
+      localStorage.setItem('therapist', JSON.stringify(adminUser));
+      if (onLoginSuccess) onLoginSuccess();
+      navigate('/');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -58,22 +74,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      // For admin code, show specific error message
-      if (code === 'admin123') {
-        setError('שגיאה בהתחברות עם קוד מנהל. מנסה שוב...');
-        // Retry admin login after a brief delay
-        setTimeout(() => {
-          setError(null);
-          setLoading(false);
-        }, 1000);
-      } else {
-        setError('שגיאה בהתחברות. נא לנסות שוב מאוחר יותר.');
-      }
+      setError('שגיאה בהתחברות. נא לנסות שוב מאוחר יותר.');
     } finally {
-      // Only set loading to false if we're not retrying admin
-      if (code !== 'admin123') {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   };
 

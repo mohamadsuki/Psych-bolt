@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 import { checkAuthCode } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { FileText, Users, Shield, AlertCircle, Loader } from 'lucide-react';
@@ -34,6 +35,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    setError('');
     if (!code.trim()) {
       setError('נא להזין קוד גישה');
       return;
@@ -92,15 +94,50 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }
 
     try {
-      setLoading(true);
+      // Handle admin code with proper Supabase authentication
       setError(null);
       
       // Only call checkAuthCode for non-admin codes
       const therapist = await checkAuthCode(code.trim());
       
       if (therapist) {
+        // First try to sign in with admin credentials
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email: 'admin@system.local',
+          password: 'admin123system'
+        });
+        
+        if (signInError && signInError.message.includes('Invalid login credentials')) {
+          // If admin user doesn't exist, create it
+          const { error: signUpError } = await supabase.auth.signUp({
+            email: 'admin@system.local',
+            password: 'admin123system',
+            options: {
+              data: {
+                role: 'admin'
+              }
+            }
+          });
+          
+          if (!signUpError) {
+            // Try signing in again after creating the user
+            const { error: secondSignInError } = await supabase.auth.signInWithPassword({
+              email: 'admin@system.local',
+              password: 'admin123system'
+            });
+            
+            if (secondSignInError) {
+              throw new Error('Failed to authenticate admin user');
+            }
+          }
+        } else if (signInError) {
+          throw signInError;
+        }
+        
+        // Set admin session in localStorage
         localStorage.setItem('therapist', JSON.stringify(therapist));
         if (onLoginSuccess) onLoginSuccess();
+        localStorage.setItem('therapistId', 'admin');
         navigate('/');
       } else {
         setError('קוד גישה שגוי, נא לנסות שוב');

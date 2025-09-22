@@ -57,6 +57,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           setError('שגיאה באימות מנהל המערכת. נא לוודא שהמשתמש קיים ב-Supabase Auth.');
           return;
         }
+        // Authenticate with Supabase for admin access
+        const authResult = await checkAuthStatus(true);
+        
+        if (!authResult.success) {
+          throw new Error(authResult.error || 'Authentication failed');
+        }
+        
         
         const adminUser = {
           id: 'admin',

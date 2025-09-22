@@ -402,10 +402,6 @@ export const updateClientTherapist = async (clientId: string, therapistId: strin
 // Authentication check function
 export const checkAuthStatus = async (triggerSignIn = false) => {
   try {
-    if (localStorage.getItem('supabase.auth.token')) {
-      return { isAuthenticated: true, success: true, error: null };
-    }
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
@@ -426,7 +422,8 @@ export const checkAuthStatus = async (triggerSignIn = false) => {
     
     if (triggerSignIn) {
       try {
-        const { data, error } = await supabase.auth.signInWithPassword({
+        // Try to sign in with admin credentials
+        let { data, error } = await supabase.auth.signInWithPassword({
           email: 'demo@example.com',
           password: 'demopassword123'
         });
@@ -435,15 +432,39 @@ export const checkAuthStatus = async (triggerSignIn = false) => {
           console.error('Auth error:', error);
           if (error.message.includes('Invalid login credentials')) {
             try {
+              // Create demo user if it doesn't exist
               const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
                 email: 'demo@example.com',
-                password: 'demopassword123'
+                password: 'demopassword123',
+                options: {
+                  data: {
+                    role: 'admin'
+                  }
+                }
               });
               
               if (signUpError) {
-                return { isAuthenticated: false, success: false, error: signUpError.message };
+                console.error('Sign up error:', signUpError);
+                // If sign up fails, try alternative admin credentials
+                const { data: altData, error: altError } = await supabase.auth.signUp({
+                  email: 'admin@therapist-system.com',
+                  password: 'admin123secure',
+                  options: {
+                    data: {
+                      role: 'admin'
+                    }
+                  }
+                });
+                
+                if (altError) {
+                  return { isAuthenticated: false, success: false, error: 'Failed to create admin user' };
+                }
               }
               
+              // Wait a moment for the user to be created
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              
+              // Try signing in again
               const { data: signInAfterSignUpData, error: signInAfterSignUpError } = 
                 await supabase.auth.signInWithPassword({
                   email: 'demo@example.com',
@@ -451,7 +472,18 @@ export const checkAuthStatus = async (triggerSignIn = false) => {
                 });
                 
               if (signInAfterSignUpError) {
-                return { isAuthenticated: false, success: false, error: signInAfterSignUpError.message };
+                // Try alternative admin credentials
+                const { data: altSignInData, error: altSignInError } = 
+                  await supabase.auth.signInWithPassword({
+                    email: 'admin@therapist-system.com',
+                    password: 'admin123secure'
+                  });
+                  
+                if (altSignInError) {
+                  return { isAuthenticated: false, success: false, error: 'Authentication failed' };
+                }
+                
+                return { isAuthenticated: true, success: true, error: null };
               }
               
               return { isAuthenticated: true, success: true, error: null };

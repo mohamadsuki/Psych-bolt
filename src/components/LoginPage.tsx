@@ -38,43 +38,50 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       return;
     }
 
-    // Special immediate handling for admin code - no async calls needed
+    // COMPLETE ISOLATION FOR ADMIN CODE - NO NETWORK CALLS AT ALL
     if (code.trim() === 'admin123') {
-      console.log('Admin code detected, logging in immediately');
-      const adminUser = {
-        id: 'admin',
-        name: 'מנהל מערכת',
-        code: 'admin123',
-        is_admin: true
-      };
-      
-      localStorage.setItem('therapist', JSON.stringify(adminUser));
-      if (onLoginSuccess) onLoginSuccess();
-      navigate('/');
-      return;
+      try {
+        console.log('Admin code detected, logging in immediately');
+        const adminUser = {
+          id: 'admin',
+          name: 'מנהל מערכת',
+          code: 'admin123',
+          is_admin: true
+        };
+        
+        localStorage.setItem('therapist', JSON.stringify(adminUser));
+        
+        // Clear any errors
+        setError(null);
+        
+        // Navigate immediately
+        if (onLoginSuccess) onLoginSuccess();
+        navigate('/');
+        return;
+      } catch (err) {
+        console.error('Admin login error:', err);
+        setError('שגיאה בהתחברות למנהל. נסה לרענן את הדף ולנסות שוב.');
+        return;
+      }
     }
 
     try {
       setLoading(true);
       setError(null);
       
-      console.log('Attempting login with code:', code);
-      const therapist = await checkAuthCode(code);
-      console.log('Authentication result:', therapist);
+      // Only call checkAuthCode for non-admin codes
+      const therapist = await checkAuthCode(code.trim());
       
       if (therapist) {
-        // Successfully authenticated
-        console.log('Login successful, saving therapist to localStorage');
         localStorage.setItem('therapist', JSON.stringify(therapist));
         if (onLoginSuccess) onLoginSuccess();
         navigate('/');
       } else {
-        console.log('Authentication failed - no therapist returned');
         setError('קוד גישה שגוי, נא לנסות שוב');
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      setError('שגיאה בהתחברות. נא לנסות שוב מאוחר יותר.');
+      setError(err.message || 'שגיאה בהתחברות. נא לנסות שוב מאוחר יותר.');
     } finally {
       setLoading(false);
     }

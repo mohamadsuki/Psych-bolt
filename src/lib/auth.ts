@@ -14,21 +14,12 @@ export interface Therapist {
  * @returns The therapist object if the code is valid, null otherwise
  */
 export const checkAuthCode = async (code: string): Promise<Therapist | null> => {
-  // Handle admin code FIRST and return immediately - no database calls
+  // Admin code should NEVER reach this function - it's handled in LoginPage
   if (code === 'admin123') {
-    console.log('Admin code detected, returning admin user immediately');
-    return {
-      id: 'admin',
-      name: 'מנהל מערכת',
-      code: 'admin123',
-      is_admin: true
-    };
+    throw new Error('Admin code should be handled in LoginPage component');
   }
   
   try {
-    // Only proceed with database lookup for non-admin codes
-    console.log('Looking up therapist code in database:', code);
-    
     // Look up the therapist by code
     const { data, error } = await supabase
       .from('therapists')

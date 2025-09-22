@@ -15,6 +15,20 @@ export interface Therapist {
  */
 export const checkAuthCode = async (code: string): Promise<Therapist | null> => {
   try {
+    // Handle admin code as a special case - return immediately without any database calls
+    if (code === 'admin123') {
+      console.log('Admin code detected, returning admin user');
+      return {
+        id: 'admin',
+        name: 'מנהל מערכת',
+        code: 'admin123',
+        is_admin: true
+      };
+    }
+    
+    // Only proceed with database lookup for non-admin codes
+    console.log('Looking up therapist code in database:', code);
+    
     // Handle admin code as a special case
     if (code === 'admin123') {
       return {
@@ -53,6 +67,17 @@ export const checkAuthCode = async (code: string): Promise<Therapist | null> => 
     return null;
   } catch (error: any) {
     console.error('Error during authentication:', error);
+    
+    // Special handling for admin code - even if there's an error, admin should work
+    if (code === 'admin123') {
+      console.log('Returning admin user despite error');
+      return {
+        id: 'admin',
+        name: 'מנהל מערכת',
+        code: 'admin123',
+        is_admin: true
+      };
+    }
     
     // Handle network errors with a user-friendly message
     if (isNetworkError(error)) {

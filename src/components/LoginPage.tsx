@@ -42,22 +42,38 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       setLoading(true);
       setError(null);
       
+      console.log('Attempting login with code:', code);
       const therapist = await checkAuthCode(code);
+      console.log('Authentication result:', therapist);
       
       if (therapist) {
         // Successfully authenticated
+        console.log('Login successful, saving therapist to localStorage');
         localStorage.setItem('therapist', JSON.stringify(therapist));
         if (onLoginSuccess) onLoginSuccess();
         navigate('/');
       } else {
+        console.log('Authentication failed - no therapist returned');
         setError('קוד גישה שגוי, נא לנסות שוב');
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      // More user-friendly error message that doesn't mention connectivity issues
-      setError('שגיאה בהתחברות. נא לנסות שוב מאוחר יותר.');
+      // For admin code, show specific error message
+      if (code === 'admin123') {
+        setError('שגיאה בהתחברות עם קוד מנהל. מנסה שוב...');
+        // Retry admin login after a brief delay
+        setTimeout(() => {
+          setError(null);
+          setLoading(false);
+        }, 1000);
+      } else {
+        setError('שגיאה בהתחברות. נא לנסות שוב מאוחר יותר.');
+      }
     } finally {
-      setLoading(false);
+      // Only set loading to false if we're not retrying admin
+      if (code !== 'admin123') {
+        setLoading(false);
+      }
     }
   };
 

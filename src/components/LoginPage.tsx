@@ -119,7 +119,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           name: 'מנהל מערכת',
           code: 'admin123',
           is_admin: true
-        });
+        };
         
         localStorage.setItem('therapist', JSON.stringify(adminUser));
         

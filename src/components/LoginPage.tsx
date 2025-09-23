@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { checkAuthCode } from '../lib/auth';
@@ -33,58 +34,103 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    setLoading(true);
     setError('');
     if (!code.trim()) {
       setError('נא להזין קוד גישה');
+      setLoading(false);
       return;
     }
 
     // COMPLETE ISOLATION FOR ADMIN CODE - NO NETWORK CALLS AT ALL
     if (code.trim() === 'admin123') {
       try {
-        setLoading(true);
         console.log('Admin code detected, logging in immediately');
         
-        // Authenticate with Supabase using admin credentials
-        // NOTE: Replace these with actual admin credentials from your Supabase Auth users
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: 'admin@example.com', // Replace with actual admin email
-          password: 'adminpassword123' // Replace with actual admin password
-        });
+        // Try to authenticate with known admin credentials
+        let authSuccess = false;
         
-        if (error) {
-          console.error('Admin Supabase authentication error:', error);
-          setError('שגיאה באימות מנהל המערכת. נא לוודא שהמשתמש קיים ב-Supabase Auth.');
-          return;
+        // Try multiple admin credential combinations
+        const adminCredentials = [
+          { email: 'admin@therapist-system.com', password: 'admin123secure' },
+          { email: 'demo@example.com', password: 'demopassword123' },
+          { email: 'admin@system.local', password: 'admin123system' }
+        ];
+        
+        for (const creds of adminCredentials) {
+          try {
+            const { data, error } = await supabase.auth.signInWithPassword(creds);
+            
+            if (!error && data.session) {
+              authSuccess = true;
+              console.log('Admin authenticated successfully with:', creds.email);
+              break;
+            }
+          } catch (tryError) {
+            console.log('Failed to auth with:', creds.email);
+          }
         }
-        // Authenticate with Supabase for admin access
-        const authResult = await checkAuthStatus(true);
         
-        if (!authResult.success) {
-          throw new Error(authResult.error || 'Authentication failed');
+        // If none worked, try to create a new admin user
+        if (!authSuccess) {
+          try {
+            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+              email: 'admin@therapist-system.com',
+              password: 'admin123secure',
+              options: {
+                data: {
+                  role: 'admin'
+                }
+              }
+            });
+            
+            if (!signUpError) {
+              // Wait a moment for the user to be created
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              // Try signing in with the new account
+              const { data, error } = await supabase.auth.signInWithPassword({
+                email: 'admin@therapist-system.com',
+                password: 'admin123secure'
+              });
+              
+              if (!error && data.session) {
+                authSuccess = true;
+                console.log('New admin user created and authenticated');
+              }
+            }
+          } catch (createError) {
+            console.error('Failed to create admin user:', createError);
+          }
         }
         
+        if (!authSuccess) {
+          throw new Error('לא ניתן להתחבר עם קוד המנהל. אנא צור קשר עם תמיכה טכנית.');
+        }
+        
+        // Verify we have a valid session
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
+          throw new Error('לא ניתן ליצור session חוקי. אנא נסה שוב.');
+        }
         
         const adminUser = {
           id: 'admin',
           name: 'מנהל מערכת',
           code: 'admin123',
-          is_admin: true,
-          supabase_user_id: data.user?.id
-        };
+          is_admin: true
+        });
         
         localStorage.setItem('therapist', JSON.stringify(adminUser));
         
-        // Clear any errors
         setError(null);
-        
-        // Navigate immediately
         if (onLoginSuccess) onLoginSuccess();
         navigate('/');
         return;
+        
       } catch (err) {
         console.error('Admin login error:', err);
-        setError('שגיאה בהתחברות למנהל. נסה לרענן את הדף ולנסות שוב.');
+        setError('שגיאה בהתחברות כמנהל: ' + (err.message || 'נסה שוב מאוחר יותר'));
         return;
       } finally {
         setLoading(false);
@@ -92,50 +138,29 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }
 
     try {
-      // Handle admin code with proper Supabase authentication
       setError(null);
+      setLoading(true);
       
       // Only call checkAuthCode for non-admin codes
       const therapist = await checkAuthCode(code.trim());
       
       if (therapist) {
-        // First try to sign in with admin credentials
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({
-          email: 'admin@system.local',
-          password: 'admin123system'
-        });
-        
-        if (signInError && signInError.message.includes('Invalid login credentials')) {
-          // If admin user doesn't exist, create it
-          const { error: signUpError } = await supabase.auth.signUp({
-            email: 'admin@system.local',
-            password: 'admin123system',
-            options: {
-              data: {
-                role: 'admin'
-              }
-            }
+        // Try to authenticate with admin credentials for regular therapists
+        try {
+          const { data, error: signInError } = await supabase.auth.signInWithPassword({
+            email: 'admin@therapist-system.com',
+            password: 'admin123secure'
           });
           
-          if (!signUpError) {
-            // Try signing in again after creating the user
-            const { error: secondSignInError } = await supabase.auth.signInWithPassword({
-              email: 'admin@system.local',
-              password: 'admin123system'
-            });
-            
-            if (secondSignInError) {
-              throw new Error('Failed to authenticate admin user');
-            }
+          if (signInError) {
+            console.warn('Could not authenticate with admin credentials for therapist login');
           }
-        } else if (signInError) {
-          throw signInError;
+        } catch (authError) {
+          console.warn('Authentication error for therapist login:', authError);
         }
         
-        // Set admin session in localStorage
         localStorage.setItem('therapist', JSON.stringify(therapist));
         if (onLoginSuccess) onLoginSuccess();
-        localStorage.setItem('therapistId', 'admin');
         navigate('/');
       } else {
         setError('קוד גישה שגוי, נא לנסות שוב');

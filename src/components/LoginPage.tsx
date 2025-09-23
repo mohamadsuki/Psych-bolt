@@ -94,13 +94,26 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 password: 'admin123secure'
               });
               
-              if (!error && data.session) {
+              if (error) {
+                if (error.message === 'Invalid login credentials') {
+                  throw new Error('נוצר משתמש מנהל חדש אך נדרש אישור דוא"ל. אנא בדוק את הגדרות Supabase או צור קשר עם תמיכה טכנית לכיבוי אישור הדוא"ל.');
+                } else {
+                  throw new Error(`שגיאה ביצירת מנהל: ${error.message}`);
+                }
+              } else if (data.session) {
                 authSuccess = true;
                 console.log('New admin user created and authenticated');
+              }
+            } else {
+              if (signUpError.message.includes('already registered')) {
+                throw new Error('משתמש מנהל כבר קיים אך לא ניתן להתחבר. ייתכן שנדרש אישור דוא"ל. אנא בדוק את הגדרות Supabase.');
+              } else {
+                throw new Error(`שגיאה ביצירת משתמש מנהל: ${signUpError.message}`);
               }
             }
           } catch (createError) {
             console.error('Failed to create admin user:', createError);
+            throw createError;
           }
         }
         

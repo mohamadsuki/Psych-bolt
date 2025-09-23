@@ -457,7 +457,11 @@ export const checkAuthStatus = async (triggerSignIn = false) => {
                 });
                 
                 if (altError) {
-                  return { isAuthenticated: false, success: false, error: 'Failed to create admin user' };
+                  return { 
+                    isAuthenticated: false, 
+                    success: false, 
+                    error: 'שגיאה ביצירת משתמש מנהל. ייתכן שנדרש אישור דוא"ל.' 
+                  };
                 }
               }
               
@@ -472,6 +476,14 @@ export const checkAuthStatus = async (triggerSignIn = false) => {
                 });
                 
               if (signInAfterSignUpError) {
+                if (signInAfterSignUpError.message === 'Invalid login credentials') {
+                  return { 
+                    isAuthenticated: false, 
+                    success: false, 
+                    error: 'נוצר משתמש חדש אך נדרש אישור דוא"ל. אנא בדוק את הגדרות Supabase או כבה אישור דוא"ל.' 
+                  };
+                }
+                
                 // Try alternative admin credentials
                 const { data: altSignInData, error: altSignInError } = 
                   await supabase.auth.signInWithPassword({
@@ -480,6 +492,13 @@ export const checkAuthStatus = async (triggerSignIn = false) => {
                   });
                   
                 if (altSignInError) {
+                  if (altSignInError.message === 'Invalid login credentials') {
+                    return { 
+                      isAuthenticated: false, 
+                      success: false, 
+                      error: 'בעיית אימות: ייתכן שנדרש אישור דוא"ל. אנא בדוק את הגדרות Supabase.' 
+                    };
+                  }
                   return { isAuthenticated: false, success: false, error: 'Authentication failed' };
                 }
                 

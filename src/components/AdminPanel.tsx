@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { getTherapists, getClients, updateClientTherapist, createTherapist, deleteTherapist } from '../lib/supabase';
 import { Users, UserPlus, Trash2, Edit, AlertCircle, Loader, RefreshCw, Save, X, Share2, Copy, Check } from 'lucide-react';
-import { Therapist } from '../lib/auth';
+import { Therapist, logout } from '../lib/auth';
 import { formatDateToDDMMYYYY } from '../utils/dateUtils';
 
 interface Client {
@@ -137,11 +137,13 @@ const AdminPanel: React.FC = () => {
       
       if (sessionError) {
         console.error('Session error:', sessionError);
-        throw new Error('Authentication session invalid');
+        logout();
+        return;
       }
       
       if (!session) {
-        throw new Error('No authenticated session found');
+        logout();
+        return;
       }
       
       if (editingTherapist) {

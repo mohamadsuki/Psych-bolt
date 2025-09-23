@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import { getTherapists, getClients, updateClientTherapist, createTherapist, deleteTherapist } from '../lib/supabase';
 import { Users, UserPlus, Trash2, Edit, AlertCircle, Loader, RefreshCw, Save, X, Share2, Copy, Check } from 'lucide-react';
 import { Therapist } from '../lib/auth';
@@ -129,6 +130,18 @@ const AdminPanel: React.FC = () => {
       if (therapists.some(t => t.code === codeToUse && (!editingTherapist || t.id !== editingTherapist.id))) {
         setTherapistError('קוד גישה זה כבר קיים במערכת');
         return;
+      }
+      
+      // Ensure we have a valid session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError);
+        throw new Error('Authentication session invalid');
+      }
+      
+      if (!session) {
+        throw new Error('No authenticated session found');
       }
       
       if (editingTherapist) {
